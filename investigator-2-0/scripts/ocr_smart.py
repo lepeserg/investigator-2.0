@@ -61,31 +61,47 @@ def run_marker(marker, src, start, end):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+class OCRFailure(RuntimeError):
+    """A failed engine invocation, distinct from a successfully read blank page."""
+
+
+def _recognize_page(tess, image, base, label):
+    """Check the engine and its expected text artifact before reading it."""
+    process = subprocess.run([tess, image, base, "-l", "rus"], capture_output=True)
+    if process.returncode != 0:
+        diagnostic = (process.stderr or process.stdout or b'').decode('utf-8', 'replace').strip()
+        raise OCRFailure('%s: Tesseract завершился с кодом %s. %s' %
+                         (label, process.returncode, diagnostic[-600:]))
+    output = base + '.txt'
+    if not os.path.isfile(output):
+        raise OCRFailure(label + ': Tesseract не создал ожидаемый текстовый файл')
+    with open(output, encoding='utf-8') as handle:
+        return handle.read()
+
+
 def run_tesseract(tess, src, start, end):
     import fitz
     out = []
     tmp = tempfile.mkdtemp(prefix="ocr_tess_")
     try:
+        if start is not None and start < 1 or end is not None and end < 1:
+            raise ValueError('Нумерация страниц начинается с 1')
         if os.path.splitext(src)[1].lower() == ".pdf":
-            doc = fitz.open(src)
-            s = start or 1
-            e = min(end or doc.page_count, doc.page_count)
-            for i in range(s - 1, e):
-                png = os.path.join(tmp, "p%04d.png" % (i + 1))
-                doc.load_page(i).get_pixmap(dpi=300).save(png)
-                base = os.path.join(tmp, "o%04d" % (i + 1))
-                subprocess.run([tess, png, base, "-l", "rus"], capture_output=True)
-                out.append("\n----- стр. %d -----\n" % (i + 1))
-                if os.path.exists(base + ".txt"):
-                    with open(base + ".txt", encoding="utf-8") as f:
-                        out.append(f.read())
-            doc.close()
+            with fitz.open(src) as doc:
+                s = start or 1
+                e = min(end or doc.page_count, doc.page_count)
+                if s > e:
+                    raise ValueError('Диапазон страниц пуст или выходит за пределы PDF')
+                for i in range(s - 1, e):
+                    png = os.path.join(tmp, "p%04d.png" % (i + 1))
+                    doc.load_page(i).get_pixmap(dpi=300).save(png)
+                    base = os.path.join(tmp, "o%04d" % (i + 1))
+                    text = _recognize_page(tess, png, base, '%s, страница %d' % (src, i + 1))
+                    out.append("\n----- стр. %d -----\n" % (i + 1) + text)
         else:
-            base = os.path.join(tmp, "o")
-            subprocess.run([tess, src, base, "-l", "rus"], capture_output=True)
-            if os.path.exists(base + ".txt"):
-                with open(base + ".txt", encoding="utf-8") as f:
-                    out.append(f.read())
+            if start not in (None, 1) or end not in (None, 1):
+                raise ValueError('Для изображения допустима только страница 1')
+            out.append(_recognize_page(tess, src, os.path.join(tmp, 'o'), src))
         return "".join(out)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -100,8 +116,16 @@ def main():
         print(__doc__)
         sys.exit(0)
     src = sys.argv[1]
-    start = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    end = int(sys.argv[3]) if len(sys.argv) > 3 else None
+    try:
+        start = int(sys.argv[2]) if len(sys.argv) > 2 else None
+        end = int(sys.argv[3]) if len(sys.argv) > 3 else None
+        if start is not None and start < 1 or end is not None and end < 1:
+            raise ValueError('Нумерация страниц начинается с 1')
+        if start is not None and end is not None and start > end:
+            raise ValueError('Начало диапазона позже конца')
+    except ValueError as exc:
+        sys.stderr.write('Ошибка диапазона: %s\n' % exc)
+        return 2
     if not os.path.isfile(src):
         sys.stderr.write("Нет файла: %s\n" % src)
         sys.exit(2)
@@ -112,16 +136,22 @@ def main():
         if text is not None:
             print("[OCR: marker/surya]")
             sys.stdout.write(text)
-            return
+            return 0
         sys.stderr.write("marker недоступен/упал — откат на Tesseract\n")
 
     tess = find_tesseract()
     if not tess:
         sys.stderr.write("Ни marker, ни Tesseract не найдены. Поставь marker-env либо Tesseract+rus.\n")
         sys.exit(3)
+    try:
+        text = run_tesseract(tess, src, start, end)
+    except (OCRFailure, OSError, ValueError) as exc:
+        sys.stderr.write('OCR НЕ ЗАВЕРШЕНО: %s\nЧастичный результат не выдаётся как полный.\n' % exc)
+        return 1
     print("[OCR: Tesseract rus (откат)]")
-    sys.stdout.write(run_tesseract(tess, src, start, end))
+    sys.stdout.write(text)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

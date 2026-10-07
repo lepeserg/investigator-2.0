@@ -27,7 +27,7 @@ import argparse
 import os
 import re
 import sys
-import zipfile
+from word_text import read_docx, VIEWS, RevisionChoiceRequired
 
 try:  # иначе кириллица в выводе ломается на Windows-консоли (cp866/cp1251)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -44,22 +44,13 @@ DEFAULT_ROOT = os.getcwd()
 SKIP_DIRS = {".git", "__pycache__", "_to_delete", "~$"}
 
 
-def extract_text(path):
+def extract_text(path, revisions=None):
     """Достать текст из файла. Возвращает str или None, если не удалось."""
     low = path.lower()
     try:
         if low.endswith(".docx"):
-            with zipfile.ZipFile(path) as z:
-                parts = []
-                for name in z.namelist():
-                    # тело + колонтитулы + сноски: там тоже бывают реквизиты
-                    if re.match(r"word/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$", name):
-                        parts.append(z.read(name).decode("utf-8", "ignore"))
-            xml = "\n".join(parts)
-            xml = re.sub(r"</w:p>", "\n", xml)
-            txt = re.sub(r"<[^>]+>", "", xml)
-            return (txt.replace("&amp;", "&").replace("&lt;", "<")
-                       .replace("&gt;", ">").replace("&quot;", '"').replace("&apos;", "'"))
+            text, _ = read_docx(path, revisions, include_auxiliary=True)
+            return text
         if low.endswith(".doc"):
             # бинарный .doc: сначала antiword (чистый текст, есть локально; в Cowork нет),
             # иначе — грубое извлечение читаемого текста в cp1251
@@ -75,6 +66,8 @@ def extract_text(path):
             return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]+", " ", raw)
         if low.endswith((".txt", ".md", ".rtf")):
             return open(path, encoding="utf-8", errors="ignore").read()
+    except RevisionChoiceRequired:
+        raise
     except Exception:
         return None
     return None
@@ -101,7 +94,12 @@ def main():
     ap.add_argument("--regex", default=None, help="дополнительно вытащить совпадения регулярки")
     ap.add_argument("--unique", action="store_true", help="сводка уникальных значений группы 1 --regex")
     ap.add_argument("--ext", default=",".join(DEFAULT_EXT))
+    ap.add_argument("--revisions", choices=VIEWS, default=None,
+                    help="после выбора пользователя: current, original или marked; без выбора чтение исправлений остановлено")
     a = ap.parse_args()
+
+    if a.revisions is not None:
+        print('!! Выбрано представление исправлений ' + a.revisions + '; это не подтверждает окончательную редакцию.', file=sys.stderr)
 
     exts = tuple(e.strip().lower() for e in a.ext.split(",") if e.strip())
     flags = re.IGNORECASE if a.ignore_case else 0
@@ -110,6 +108,7 @@ def main():
             for q in a.query]
     extra = re.compile(a.regex, flags) if a.regex else None
 
+    blocked_revisions = []
     scanned = 0
     files_hit = 0
     uniq = set()
@@ -120,7 +119,12 @@ def main():
             if fn.startswith("~$") or not fn.lower().endswith(exts):
                 continue
             path = os.path.join(root, fn)
-            txt = extract_text(path)
+            try:
+                txt = extract_text(path, revisions=a.revisions)
+            except RevisionChoiceRequired as exc:
+                blocked_revisions.append(path)
+                print('!! ТРЕБУЕТСЯ ВЫБОР РЕДАКЦИИ: ' + path + ': ' + str(exc), file=sys.stderr)
+                continue
             if not txt:
                 continue
             scanned += 1
@@ -132,6 +136,10 @@ def main():
             files_hit += 1
             rel = os.path.relpath(path, a.root)
             print(f"\n### {rel}")
+            if a.revisions == 'marked' and any(label in txt for label in
+                    ('[ВСТАВКА:', '[УДАЛЕНИЕ:', '[ПЕРЕМЕЩЕНО СЮДА:', '[ПЕРЕМЕЩЕНО ОТСЮДА:')):
+                print('!! ИСПРАВЛЕНИЯ WORD: совпадение может относиться к удалённому или вставленному тексту; сверить редакцию: ' + rel,
+                      file=sys.stderr)
             if a.files_only:
                 continue
             shown = 0
@@ -159,6 +167,9 @@ def main():
         print(f"\nУникальных значений по --regex: {len(uniq)}")
         for v in sorted(uniq):
             print(f"   • {v[:180]}")
+    if blocked_revisions:
+        print('ПОИСК НЕПОЛНЫЙ: %d файл(ов) с исправлениями ожидают выбора редакции. Вывод об отсутствии сведений не делается.' % len(blocked_revisions))
+        sys.exit(2)
     if files_hit == 0:
         # ⛔ «В КОРПУСЕ НЕ НАЙДЕНО» — сильное утверждение: на нём висит правило 30
         # (право поставить «подлежит установлению»). Оно ЛОЖНО, если обход шёл не по
