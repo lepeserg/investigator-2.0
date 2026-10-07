@@ -1,17 +1,8 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-py -3.12 bootstrap.py --profile base
-if errorlevel 1 (
-  echo Installation failed. Python 3.12 and internet access are required.
-  pause
-  exit /b 1
-)
-py -3.12 connect_skills.py
-if errorlevel 1 (
-  echo Skill connection failed. See README.md.
-  pause
-  exit /b 1
-)
-echo Base environment and project skills prepared. See README.md for local settings.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-windows.ps1" %*
+set "setup_result=%errorlevel%"
+if not "%setup_result%"=="0" echo Setup incomplete or cancelled. See the message above and README.md.
 pause
+exit /b %setup_result%

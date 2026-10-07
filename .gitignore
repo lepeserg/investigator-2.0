@@ -170,6 +170,11 @@
 !/requirements/ocr.txt
 !/run.py
 !/start.cmd
+!/setup-windows.ps1
+!/setup_windows.py
+!/system_tools.py
+!/docs/WINDOWS-SETUP.md
+!/tests/test_windows_setup.py
 !/tests/test_connect.py
 !/tests/test_documents.py
 !/tests/test_setup.py
