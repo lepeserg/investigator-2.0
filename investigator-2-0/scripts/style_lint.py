@@ -19,6 +19,7 @@
 уместность предупреждений) ловит человек и вычитка донора по существу (Критич. правило 13-bis).
 
 Запуск:
+    python style_lint.py "<путь к .docx>" --genre postanovlenie --legal-style
     python style_lint.py \"<путь к .docx>\"
     python style_lint.py \"<путь к .docx>\" --genre objyasnenie   # включить проверки объяснения
     python style_lint.py \"<путь к .docx>\" --genre oz            # обвинительное заключение
@@ -32,6 +33,11 @@
                                                                 # статус лица подтверждён первоисточником
 
 Код возврата: 0 — чисто; 1 — есть флаги (для встраивания в чек-лист).
+С --legal-style добавляются кандидаты на смысловую сверку: «и/или», граница даты «до»
+и «последний» при нескольких Ф.И.О. вида «Фамилия И.О.» в одном абзаце.
+Флаг не доказывает ошибку и не выбирает прочтение. Дословные фрагменты в парных кавычках
+внутри абзаца исключаются только из этих дополнительных проверок.
+Статкарты не проверяются этим режимом; файл не изменяется. Источники и смысл проверяются отдельно.
 Зависимости: python-docx (если нет — авто-откат на распаковку zip + document.xml)."""
 import os
 import re
@@ -1118,7 +1124,53 @@ def _check_signature_break(raw):
 _OLD_STAMP = re.compile(r"ВСУ СК России по ЦВО|\(по гарнизону\)|г\. Казань, Россия, 420111")
 
 
-def lint(path, genre=None, allow_foreign_reg=False, status_verified=None):
+_STYLE_QUOTES = re.compile(r'«[^»]*»|„[^“]*“|“[^”]*”|"[^"\n]*"')
+_STYLE_AND_OR = re.compile(r"\bи\s*/\s*или\b", re.IGNORECASE)
+_STYLE_UNTIL = re.compile(r"\bдо\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\b", re.IGNORECASE)
+_STYLE_EXPLICIT_END = re.compile(
+    r"^\s*,?\s*(?:года\s*|г\.\s*)?(?:включительно\b|не\s+включая\b)", re.IGNORECASE)
+_STYLE_LAST_PERSON = re.compile(
+    r"\bпоследн(?:ий|его|ему|им|ем|яя|ей|юю)\b"
+    r"(?!\s+(?:раз|день|дня|дню|днем|месяц|год|лет|лист|страниц|срок|момент|номер|абзац|вопрос|пункт)[а-яё]*\b)",
+    re.IGNORECASE)
+
+
+def _legal_style_findings(text):
+    """Вернуть кандидаты на сверку формы без выбора смысла и без изменения текста."""
+    # Пробелы сохраняют смещения. Содержание цитаты может быть значимым доказательством,
+    # поэтому не предлагаем уточнять его от имени составителя. Непарные кавычки не маскируем.
+    plain = _STYLE_QUOTES.sub(lambda m: " " * len(m.group()), text)
+    out = []
+
+    def add(label, message, match):
+        start = max(0, match.start() - 35)
+        end = min(len(text), match.end() + 55)
+        snippet = ("…" if start else "") + text[start:end].strip() + ("…" if end < len(text) else "")
+        out.append((label, message, snippet))
+
+    m = _STYLE_AND_OR.search(plain)
+    if m:
+        add("стиль-проверить-перечень",
+            "«и/или»: проверить, нужны все элементы или допустим выбор. "
+            "Однозначную конструкцию сохранить; союз не заменять без основания.", m)
+    for m in _STYLE_UNTIL.finditer(plain):
+        if _mkdate(*m.groups()) is None or _STYLE_EXPLICIT_END.match(plain[m.end():]):
+            continue
+        add("стиль-проверить-границу",
+            "«до [дата]»: проверить включённость границы срока или периода по источнику. "
+            "В показаниях сохранить сообщённую точность; «включительно» не добавлять автоматически.", m)
+        break
+    people = {(_surname_stem(m.group(1)).casefold(), m.group(2), m.group(3))
+              for m in _FIO_INI_LAST.finditer(plain)}
+    m = _STYLE_LAST_PERSON.search(plain)
+    if len(people) >= 2 and m:
+        add("стиль-проверить-отсылку",
+            "«последний» при нескольких Ф.И.О.: проверить исполнителя по контексту и источнику. "
+            "При однозначной отсылке правка не требуется; неизвестное лицо не выбирать по догадке.", m)
+    return out
+
+
+def lint(path, genre=None, allow_foreign_reg=False, status_verified=None, legal_style=False):
     is_statcard = genre in _STATCARD_GENRES
     is_postanovlenie = genre in _POSTANOVLENIE_GENRES
     n_table = None          # с какого индекса пошли ЯЧЕЙКИ (для статкарты); None — не определено
@@ -1163,6 +1215,9 @@ def lint(path, genre=None, allow_foreign_reg=False, status_verified=None):
         blank_layout = _place_date_line(text) or _blank_layout_line(text) or (
             is_postanovlenie and i in sig_idx)
         in_table = is_statcard and n_table is not None and i >= n_table
+        if legal_style and not is_statcard and not blank_layout and not is_sig:
+            findings.extend((i + 1, label, msg, snippet)
+                            for label, msg, snippet in _legal_style_findings(text))
         for label, rx, msg in checks:
             if (is_sig or blank_layout) and label in _SPACING_CHECKS:
                 continue  # выравнивание подписи / вёрстка бланка — не «двойной пробел»
@@ -1479,6 +1534,9 @@ def main():
         print(__doc__)
         sys.exit(0)
     genre = None
+    legal_style = "--legal-style" in args
+    if legal_style:
+        args.remove("--legal-style")
     if "--genre" in args:
         gi = args.index("--genre")
         genre = args[gi + 1] if gi + 1 < len(args) else None
@@ -1502,7 +1560,7 @@ def main():
         sys.exit(2)
     path = args[0]
 
-    findings = lint(path, genre, allow_foreign_reg, status_verified)
+    findings = lint(path, genre, allow_foreign_reg, status_verified, legal_style=legal_style)
     if status_verified:
         print(f'статус лица подтверждён: {status_verified} — назвать это в ответе (правило 41).')
     if not findings:
@@ -1515,7 +1573,7 @@ def main():
         print("(Смысл — нормы, ярлыки, права, уместность предупреждений — проверяет человек.)")
         sys.exit(0)
 
-    print(f"style_lint: найдено {len(findings)} флаг(ов). Устранить перед выдачей:\n")
+    print(f"style_lint: найдено {len(findings)} флаг(ов). Проверить перед выдачей:\n")
     for para_no, label, msg, snippet in findings:
         loc = f"абзац {para_no}" if para_no else "документ"
         print(f"  [{label}] {loc}: {msg}")
@@ -1523,6 +1581,10 @@ def main():
             print(f"      → {snippet}")
     print("\nПримечание: «точка-с-запятой» и «прямые-кавычки» могут быть законны в дословной "
           "цитате нормы — проверить контекст, а не удалять слепо.")
+    if any(f[1].startswith("стиль-проверить-") for f in findings):
+        print("«стиль-проверить-*»: кандидаты на сверку, не доказанные дефекты. "
+              "Смысл выбирается по источнику; при нескольких прочтениях показать их и вопрос "
+              "для уточнения. Скрипт не проверяет право, не устанавливает факты и не меняет DOCX.")
     if any(f[1] == "чужая-регистрация" for f in findings):
         print("«чужая-регистрация»: если это документ-ВОЗВРАТ материала, который у нас не "
               "регистрировался, — флаг ложный, перезапустить с --genre vozvrat.")

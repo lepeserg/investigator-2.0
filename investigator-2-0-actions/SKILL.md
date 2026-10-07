@@ -5,6 +5,8 @@ description: "Другие следственные действия военн�
 
 # Следователь: следственные действия
 
+Для языка постановления и протокола выбирай соответствующий [профиль](../investigator-2-0/references/03a-legal-style-profiles.md). Наблюдение, слова участника и оценка различаются; стилистическая правка сохраняет последовательность и признаки объектов.
+
 Применяй [общую основу](../investigator-2-0/SKILL.md) и выбирай лишь нужный жанр: [проверка показаний и опознание](../investigator-2-0/references/06b-ppm-opoznanie.md), [осмотры, выемка и обыск](../investigator-2-0/references/06c-osmotry-vyemka-obysk.md), [экспертизы](../investigator-2-0/references/06d-ekspertizy.md), [вещественные доказательства](../investigator-2-0/references/06e-veshchdoki.md), [общие условия и участники](../investigator-2-0/references/06f-obshchie.md). Для очной ставки используй соответствующий раздел [06a-doprosy.md](../investigator-2-0/references/06a-doprosy.md).
 
 ## Обязательные проверки по задаче

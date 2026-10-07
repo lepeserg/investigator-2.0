@@ -87,6 +87,8 @@
 !/investigator-2-0/references/02a-format-profile.md
 !/investigator-2-0/references/02b-procedural-forms.md
 !/investigator-2-0/references/03-style.md
+!/investigator-2-0/references/03a-legal-style-profiles.md
+!/investigator-2-0/references/03b-legal-style-examples.md
 !/investigator-2-0/references/04-classifier.md
 !/investigator-2-0/references/05-genres-lifecycle.md
 !/investigator-2-0/references/05b-prodlenie-proverki-krsp.md
@@ -105,6 +107,11 @@
 !/investigator-2-0/references/07e-obshchie.md
 !/investigator-2-0/references/07f-obvinenie-oz-examples.md
 !/investigator-2-0/references/07g-pre-issuance-review.md
+!/investigator-2-0/references/07h-charging-writing.md
+!/investigator-2-0/references/07i-legal-language.md
+!/investigator-2-0/licenses/
+/investigator-2-0/licenses/*
+!/investigator-2-0/licenses/pravo-grammatika-LICENSE.txt
 !/investigator-2-0/references/08-genres-correspondence.md
 !/investigator-2-0/references/08a-zaprosy.md
 !/investigator-2-0/references/08b-soprovody.md
@@ -177,6 +184,7 @@
 !/tests/test_windows_setup.py
 !/tests/test_connect.py
 !/tests/test_documents.py
+!/tests/test_legal_style.py
 !/tests/test_setup.py
 
 **/__pycache__/
