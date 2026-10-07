@@ -1,94 +1,92 @@
 # -*- coding: utf-8 -*-
-"""extract_docx.py — быстрый UTF-8 ридер содержимого .docx (абзацы + таблицы).
+"""Read DOCX paragraphs and tables in document order, labeling tracked changes.
 
-Зачем: читать содержимое .docx надёжно, без питон-однострочников (кириллица в
-терминале ломается). Вывод всегда UTF-8.
+    python extract_docx.py "file.docx" "folder" -o out.txt
+    python extract_docx.py "file.docx" --revisions marked|current|original
 
-Использование:
-    python extract_docx.py "файл1.docx" "файл2.docx" ...
-    python extract_docx.py "путь к папке"        # все .docx рекурсивно
-    python extract_docx.py ... -o out.txt        # большой вывод в файл
+Without a selected view, tracked changes stop reading until the user chooses.
+Selecting a view does not accept changes or establish an approved document.
+Images need visual inspection.
 """
-import os, sys, glob
-os.environ.setdefault("PYTHONUTF8", "1")
+import argparse
+import glob
+import os
+import sys
+from word_text import read_docx, VIEWS, RevisionChoiceRequired
+
+os.environ.setdefault('PYTHONUTF8', '1')
 try:
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding='utf-8')
 except Exception:
     pass
-from docx import Document
 
 
-def dump(path, out):
-    """Возвращает True, если файл прочитан. False — если открыть не удалось
-    (нужно для честного кода возврата при пакетном вызове, ревизия 22.08.2026)."""
-    out.write("\n" + "=" * 80 + "\n")
-    out.write("ФАЙЛ: " + os.path.basename(path) + "\n")
-    out.write("=" * 80 + "\n")
+def dump(path, out, revisions=None):
+    """Return whether text was read; warn explicitly about tracked changes."""
+    out.write('\n' + '=' * 80 + '\nФАЙЛ: ' + os.path.basename(path) + '\n' + '=' * 80 + '\n')
     try:
-        d = Document(path)
-    except Exception as e:
-        out.write("!! ошибка: %s\n" % e)
+        text, metadata = read_docx(path, revisions)
+    except RevisionChoiceRequired as exc:
+        out.write('!! ТРЕБУЕТСЯ ВЫБОР РЕДАКЦИИ: %s\n' % exc)
         return False
-    for p in d.paragraphs:
-        t = p.text.rstrip()
-        if t:
-            out.write(t + "\n")
-    for ti, tbl in enumerate(d.tables):
-        out.write("\n[ТАБЛИЦА %d]\n" % (ti + 1))
-        for row in tbl.rows:
-            cells = [c.text.strip().replace("\n", " ") for c in row.cells]
-            line = " | ".join(cells)
-            if line.strip(" |"):
-                out.write(line + "\n")
+    except Exception as exc:
+        out.write('!! ошибка: %s\n' % exc)
+        return False
+    if metadata['revisions']:
+        out.write('!! ИСПРАВЛЕНИЯ WORD: режим ' + revisions + '; ' +
+                  ', '.join(key + '=' + str(value) for key, value in metadata['revisions'].items()) +
+                  '. Это представление для чтения, не подтверждение окончательной редакции.\n')
+    out.write(text)
     return True
 
 
 def collect(args):
-    files, out_path = [], None
-    i = 0
+    """Preserve the previous helper contract: paths and optional -o -> pair."""
+    files, out_path, i = [], None, 0
     while i < len(args):
-        a = args[i]
-        if a == "-o" and i + 1 < len(args):
+        item = args[i]
+        if item == '-o' and i + 1 < len(args):
             out_path = args[i + 1]
             i += 2
             continue
-        if os.path.isdir(a):
-            files += sorted(glob.glob(os.path.join(a, "**", "*.docx"), recursive=True))
+        if os.path.isdir(item):
+            files += sorted(glob.glob(os.path.join(item, '**', '*.docx'), recursive=True))
         else:
-            files.append(a)
+            files.append(item)
         i += 1
     return files, out_path
 
 
 def main(argv):
-    if not argv:
-        print("Укажи путь к .docx или папке. См. шапку extract_docx.py")
-        return 2
-    if argv[0] in ("-h", "--help", "/?", "help"):
-        print(__doc__)
-        return 0
-    files, out_path = collect(argv)
-    files = [f for f in files if not os.path.basename(f).startswith("~$")]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('paths', nargs='+')
+    parser.add_argument('-o', dest='output')
+    parser.add_argument('--revisions', choices=VIEWS, default=None,
+                        help='только после выбора пользователя; без выбора исправления останавливают чтение')
+    if argv and argv[0] in ('/?', 'help'):
+        argv = ['--help']
+    args = parser.parse_args(argv)
+    files, _ = collect(args.paths)
+    files = [path for path in files if not os.path.basename(path).startswith('~$')]
     bad = 0
-    if out_path:
-        with open(out_path, "w", encoding="utf-8") as f:
-            for p in files:
-                if not dump(p, f):
+    if args.output:
+        with open(args.output, 'w', encoding='utf-8') as output:
+            for path in files:
+                if not dump(path, output, args.revisions):
                     bad += 1
-        print("Записано %d файл(ов) в %s" % (len(files), out_path))
+        print('Записано %d файл(ов) в %s' % (len(files), args.output))
     else:
-        for p in files:
-            if not dump(p, sys.stdout):
+        for path in files:
+            if not dump(path, sys.stdout, args.revisions):
                 bad += 1
     if bad:
-        # Раньше здесь возвращался 0 — «молчаливый успех» при непрочитанном файле.
-        print("!! не удалось открыть файлов: %d из %d" % (bad, len(files)), file=sys.stderr)
+        print('!! не удалось открыть файлов: %d из %d' % (bad, len(files)), file=sys.stderr)
         return 1
     if not files:
-        print("Ни одного .docx не найдено.", file=sys.stderr)
+        print('Ни одного .docx не найдено.', file=sys.stderr)
         return 2
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

@@ -352,7 +352,7 @@ def check(root):
             for link in re.findall(r'\]\(([^)]+)\)', entry_text):
                 if '://' in link or link.startswith('#'):
                     continue
-                target = os.path.normpath(os.path.join(os.path.dirname(entry), link.split('#')[0]))
+                target = os.path.normpath(os.path.join(os.path.dirname(entry), unquote(link.strip().strip('<>').split('#')[0])))
                 if not os.path.exists(target):
                     problems.append(f'{folder}: не найден переход {link}')
 

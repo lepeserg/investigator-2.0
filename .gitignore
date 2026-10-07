@@ -211,3 +211,13 @@
 *.mp3
 *.wav
 *.mp4
+
+!/investigator-2-0/scripts/word_text.py
+
+!/investigator-2-0/references/03c-legal-grammar.md
+
+!/Настроить доступ к модели.cmd
+
+!/tests/test_refactor.py
+
+!/docs/UPDATES.md

@@ -5,6 +5,8 @@ description: "Запросы и служебная переписка военн
 
 # Следователь: запросы и переписка
 
+При составлении и содержательной редакции применяй [общую проверку однозначности](../investigator-2-0/references/03c-legal-grammar.md): исполнитель, состав требуемого, охват перечня, период, срок и модальность. Объём требования уточняй по заданию и основанию.
+
 Для языка применяй [профиль переписки](../investigator-2-0/references/03a-legal-style-profiles.md): предмет, период и объём исполнения понятны; просьба, право и обязанность не подменяют друг друга стилевой правкой.
 
 Сначала прочитай [общую основу](../investigator-2-0/SKILL.md), затем нужный раздел: [запросы](../investigator-2-0/references/08a-zaprosy.md), [сопроводы](../investigator-2-0/references/08b-soprovody.md), [поручения, повестки и представления](../investigator-2-0/references/08c-porucheniya-povestki.md), [передача по подследственности](../investigator-2-0/references/08d-peredacha-obshchie.md), [рапорты](../investigator-2-0/references/08e-raport.md), [адресация](../investigator-2-0/references/08f-adresaciya-zaprosov.md).

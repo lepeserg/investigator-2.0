@@ -1353,7 +1353,7 @@ def _set_executor_footer(doc, name, phone, size=Pt(10)):
 
 def build_letterhead_doc(out_path, body_blocks, blank_template_path=None,
                          leading_lines=LETTERHEAD_LEADING_LINES, executor=None,
-                         constants=None):
+                         constants=None, *, letterhead_profile="auto"):
     """
     Собирает документ на бланке органа (герб + реквизиты) и сохраняет.
 
@@ -1378,6 +1378,8 @@ def build_letterhead_doc(out_path, body_blocks, blank_template_path=None,
             True — данные исполнителя взять из констант (исполнитель_имя_отчество / _телефон);
             (имя, телефон) — явный кортеж.
         constants: путь к «константы.json».
+        letterhead_profile: auto (по структуре), vsu-cvo-requests или legacy.
+            Для запросов ВСУ выбирай vsu-cvo-requests явно; имя копии не имеет значения.
 
     Returns:
         out_path (для удобства chain).
@@ -1399,13 +1401,25 @@ def build_letterhead_doc(out_path, body_blocks, blank_template_path=None,
 
     # В бланке ВСУ адресат находится в правой ячейке на уровне угловика.
     # Размещение адресата отдельными абзацами ниже таблицы нарушает бланк.
-    vsu_request_blank = os.path.basename(blank_template_path).lower() == "blank_vsu_cvo_requests.docx"
+    if letterhead_profile not in ("auto", "vsu-cvo-requests", "legacy"):
+        raise ValueError("Неизвестный профиль бланка: " + str(letterhead_profile))
+    left_text = doc.tables[0].cell(0, 0).text.upper() if doc.tables else ""
+    structural_vsu = ("УПРАВЛЕНИЕ ПО ЦЕНТРАЛЬНОМУ" in left_text
+                      and "ВОЕННОМУ ОКРУГУ" in left_text)
+    # The filename is retained only as a compatibility guard for malformed old inputs.
+    named_vsu = os.path.basename(blank_template_path).lower() == "blank_vsu_cvo_requests.docx"
+    vsu_request_blank = letterhead_profile == "vsu-cvo-requests" or (
+        letterhead_profile == "auto" and (structural_vsu or named_vsu))
     if vsu_request_blank:
-        if not doc.tables or len(doc.tables[0].rows[0].cells) < 2:
+        if not structural_vsu:
+            raise ValueError("Профиль ВСУ выбран для бланка с неподтверждённым угловиком")
+        if not doc.tables or not doc.tables[0].rows or len(doc.tables[0].rows[0].cells) < 2:
             raise ValueError("Бланк ВСУ не содержит правой ячейки для адресата")
         if not addressee_lines:
             raise ValueError("Для запроса на бланке ВСУ нужен блок адресата первым в body_blocks")
         cell = doc.tables[0].cell(0, 1)
+        if cell._tc is doc.tables[0].cell(0, 0)._tc or len(cell.paragraphs) < 3:
+            raise ValueError("Бланк ВСУ не содержит отдельного проверенного поля адресата")
         slots = cell.paragraphs[3:]
         for i, line in enumerate(addressee_lines):
             p = slots[i] if i < len(slots) else cell.add_paragraph()
