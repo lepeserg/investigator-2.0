@@ -7,6 +7,7 @@ import subprocess
 import sys
 import bootstrap
 import local_config
+import system_tools
 
 ROOT = Path(__file__).resolve().parent
 
@@ -15,14 +16,8 @@ def environment(config):
     runtime = ROOT/'runtime'
     temp = runtime/'temp'
     temp.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
+    env = system_tools.environment(config, ROOT)
     paths = [bootstrap.python_path().parent]
-    paths.extend(Path(p) for p in config['tools']['extra_path'])
-    if os.name == 'nt':
-        paths.append(Path(r'C:\Program Files\Tesseract-OCR'))
-        packages = Path.home()/'AppData'/'Local'/'Microsoft'/'WinGet'/'Packages'
-        if packages.exists():
-            paths.extend(p.parent for p in packages.glob('Gyan.FFmpeg*/**/ffmpeg.exe'))
     env['PATH'] = os.pathsep.join(str(p) for p in paths if p.exists()) + os.pathsep + env.get('PATH', '')
     env.update(PYTHONIOENCODING='utf-8', PYTHONUTF8='1', PYTHONDONTWRITEBYTECODE='1',
                TEMP=str(temp), TMP=str(temp), HF_HOME=str(runtime/'models'),
