@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "projects_root": "",
+  "templates_root": "",
+  "signer": {
+    "full_name": "",
+    "short_name": "",
+    "position": "",
+    "rank": "",
+    "department": "",
+    "valid_from": ""
+  },
+  "correspondence": {
+    "reply_postal_address": "",
+    "reply_email": "",
+    "phone": "",
+    "requested_reply_days": null,
+    "letterhead_file": ""
+  },
+  "tools": {
+    "extra_path": [],
+    "tessdata_prefix": ""
+  }
+}

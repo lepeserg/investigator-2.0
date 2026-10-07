@@ -1,0 +1,2 @@
+# FFmpeg, model downloads and gated-model permissions are separate steps.
+whisperx==3.8.6

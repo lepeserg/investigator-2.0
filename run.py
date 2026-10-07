@@ -1,0 +1,67 @@
+"""Run a bundled tool in the isolated public-edition environment."""
+from pathlib import Path
+import argparse
+import json
+import os
+import subprocess
+import sys
+import bootstrap
+import local_config
+
+ROOT = Path(__file__).resolve().parent
+
+
+def environment(config):
+    runtime = ROOT/'runtime'
+    temp = runtime/'temp'
+    temp.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    paths = [bootstrap.python_path().parent]
+    paths.extend(Path(p) for p in config['tools']['extra_path'])
+    if os.name == 'nt':
+        paths.append(Path(r'C:\Program Files\Tesseract-OCR'))
+        packages = Path.home()/'AppData'/'Local'/'Microsoft'/'WinGet'/'Packages'
+        if packages.exists():
+            paths.extend(p.parent for p in packages.glob('Gyan.FFmpeg*/**/ffmpeg.exe'))
+    env['PATH'] = os.pathsep.join(str(p) for p in paths if p.exists()) + os.pathsep + env.get('PATH', '')
+    env.update(PYTHONIOENCODING='utf-8', PYTHONUTF8='1', PYTHONDONTWRITEBYTECODE='1',
+               TEMP=str(temp), TMP=str(temp), HF_HOME=str(runtime/'models'),
+               HF_HUB_DISABLE_TELEMETRY='1', PYANNOTE_METRICS_ENABLED='0',
+               HF_HUB_DISABLE_SYMLINKS_WARNING='1')
+    if config['tools']['tessdata_prefix']:
+        env['TESSDATA_PREFIX'] = config['tools']['tessdata_prefix']
+    # Explicit legacy profiles take precedence. Generated data stays outside Git.
+    if not env.get('SK_CONSTANTS'):
+        profile = runtime/'local-constants.json'
+        profile.write_text(json.dumps(local_config.legacy_constants(config), ensure_ascii=False, indent=2), encoding='utf-8')
+        env['SK_CONSTANTS'] = str(profile)
+    return env
+
+
+def select_script(name):
+    scripts = (ROOT/'investigator-2-0'/'scripts').resolve()
+    path = (scripts/name).resolve()
+    if path.parent != scripts or path.suffix != '.py' or not path.is_file():
+        raise ValueError('Select an existing Python script directly inside investigator-2-0/scripts')
+    return path
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--offline', action='store_true', help='Do not install missing Python packages')
+    parser.add_argument('tool', help='Script name, e.g. extract_docx.py')
+    parser.add_argument('args', nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    try:
+        script = select_script(args.tool)
+        config = local_config.load()
+        python = bootstrap.ensure('base', args.offline)
+        return subprocess.call([str(python), str(script), *args.args], env=environment(config))
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f'Cannot run tool: {exc}', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
