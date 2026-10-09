@@ -155,4 +155,20 @@ class RefactorTests(unittest.TestCase):
         with self.assertRaises(ValueError):make_docx.build_letterhead_doc(str(out),[{'type':'para','text':'Учебный текст.'}],blank_template_path=str(blank),letterhead_profile='vsu-cvo-requests')
         self.assertFalse(out.exists())
 
+    def test_check_skill_flags_taskkill_by_image_name(self):
+        import check_skill
+        root=self.folder/'skill';(root/'references').mkdir(parents=True);(root/'scripts').mkdir()
+        def flagged(code):
+            (root/'scripts'/'synthetic.py').write_text('"""Синтетический скрипт."""\nimport os, subprocess\n'+code+'\n',encoding='utf-8')
+            problems=check_skill.check(str(root))[0]
+            return [p for p in problems if 'synthetic.py' in p and 'taskkill' in p]
+        for code in ['os.system("taskkill /F /IM X.EXE")',
+                     'os.system("TASKKILL /f /im excel.exe /T >nul 2>&1")',
+                     'subprocess.run(["taskkill", "/F", "/IM", "X.EXE"])',
+                     'subprocess.run([\n    "taskkill",\n    "/F",\n    "/im",\n    "WINWORD.EXE"])']:
+            with self.subTest(code=code):self.assertTrue(flagged(code))
+        for code in ['os.system("taskkill /F /PID 123")',
+                     'subprocess.run(["taskkill", "/F", "/PID", str(123)])']:
+            with self.subTest(code=code):self.assertFalse(flagged(code))
+
 if __name__=='__main__':unittest.main()

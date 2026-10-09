@@ -503,8 +503,15 @@ def check(root):
     DANGER = [
         (r'Dispatch\(\s*["\'](?:Word|Excel|PowerPoint)\.Application',
          'Dispatch подключается к РАБОЧЕМУ Office пользователя — только DispatchEx (свой процесс)'),
-        (r'taskkill[^\n]*["\']/IM["\']',
-         'taskkill /IM убьёт и рабочий Office владельца — снимать только свои PID и только окна без заголовка'),
+        # taskkill по ИМЕНИ образа — в любом регистре и в любой форме: строка для os.system /
+        # subprocess («taskkill /F /IM EXCEL.EXE») и список аргументов (["taskkill", "/F", "/IM", …]),
+        # в т.ч. разнесённый по строкам. Окно поиска — до закрывающей скобки вызова.
+        # Повод: дважды (сначала Word, затем Excel — post_release_gvp.py) `taskkill /F /IM` снёс
+        # ВСЕ экземпляры владельца вместе с несохранёнными документами. Снимать только СВОЙ PID.
+        (r'(?i)\btaskkill\b[^)\]]{0,300}?(?<![\w/-])[/-]IM\b',
+         'снятие процесса по имени образа (ключ /IM у taskkill) убьёт ВСЕ экземпляры программы '
+         'владельца с несохранёнными документами '
+         '(дважды: Word, затем Excel) — снимать только СВОЙ PID (taskkill /PID <свой>)'),
     ]
     for f in py_files:
         src = _read(os.path.join(scr_dir, f))
