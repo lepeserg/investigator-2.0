@@ -648,7 +648,7 @@ def check(root):
                 continue
             declared.add(re.split(r"[;<>=\[\s!]", line, 1)[0].strip().lower())
         # Пакеты, без которых скрипты не запустятся. Ключ — импорт, значение — имя на PyPI.
-        need = {"docx": "python-docx", "fitz": "pymupdf", "win32com": "pywin32"}
+        need = {"docx": "python-docx", "pymupdf": "pymupdf", "win32com": "pywin32"}
         srcs = {f: _read(os.path.join(scr_dir, f)) for f in py_files}
         for mod, pipname in need.items():
             used = any(re.search(r"(?:^|\W)import\s+%s\b|from\s+%s\b" % (mod, mod), t)

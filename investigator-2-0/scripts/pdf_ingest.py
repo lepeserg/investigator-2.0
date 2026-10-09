@@ -43,7 +43,7 @@ def _engine():
     if forced in ("fitz", "poppler"):
         return forced
     try:
-        import fitz  # noqa: F401
+        import pymupdf as fitz  # noqa: F401
         return "fitz"
     except Exception:
         return "poppler"
@@ -113,7 +113,7 @@ def _text_poppler(path, start, end):
 
 # ---------------------------------------------------------------- fitz (PyMuPDF)
 def _info_fitz(path):
-    import fitz
+    import pymupdf as fitz
     doc = fitz.open(path)
     n = doc.page_count
     size_mb = round(os.path.getsize(path) / (1024.0 * 1024.0), 1)
@@ -149,7 +149,7 @@ def _info_fitz(path):
 
 
 def _render_fitz(path, start, end, dpi, outdir):
-    import fitz
+    import pymupdf as fitz
     os.makedirs(outdir, exist_ok=True)
     doc = fitz.open(path)
     end = min(end, doc.page_count)
@@ -163,7 +163,7 @@ def _render_fitz(path, start, end, dpi, outdir):
 
 
 def _text_fitz(path, start, end):
-    import fitz
+    import pymupdf as fitz
     doc = fitz.open(path)
     end = min(end, doc.page_count)
     parts = []
