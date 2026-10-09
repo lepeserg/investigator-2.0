@@ -17,7 +17,14 @@ import check_account  # noqa: E402
 # allowlist, so a new file that lacks its own entry silently stays out of the release.
 PUBLISHED_GLOBS = (
     'investigator-2-0/scripts/*.py',
-    'investigator-2-0/references/*.md',
+    'investigator-2-0*/SKILL.md',
+    'investigator-2-0*/references/*.md',
+    'investigator-2-0*/agents/*.yaml',
+    'docs/*.md',
+    '*.py',
+    '*.cmd',
+    '*.ps1',
+    'README.md',
     'tests/*.py',
     'requirements/*.txt',
     '.github/workflows/*.yml',

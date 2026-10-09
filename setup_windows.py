@@ -23,6 +23,8 @@ LANGUAGES = {
     'eng': '7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2',
     'osd': '9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff',
 }
+# WinGet APPINSTALLER_CLI_ERROR_NO_APPLICABLE_INSTALLER (winget-cli doc/.../returnCodes.md).
+NO_APPLICABLE_INSTALLER = 0x8A150010
 
 
 def selected(profile):
@@ -58,14 +60,17 @@ def install_package(name):
     package = system_tools.PACKAGES[name]
     # Keep license/source prompts visible; never bypass installer hash validation.
     command = [winget, 'install', '--id', package, '--exact', '--source', 'winget']
-    # Work PCs often deny admin rights: try a per-user install first. Packages without
-    # a per-user installer (e.g. machine-wide NSIS/MSI) fail here and fall back below.
+    # Work PCs often deny admin rights: try a per-user install first. Only when WinGet
+    # reports that no installer fits user scope (machine-wide NSIS/MSI) retry without it;
+    # any other failure (declined agreement/UAC, network, hash) stops setup as before.
     result = subprocess.run(command + ['--scope', 'user'])
     if result.returncode == 0:
         return
-    print(f'Установка {package} только для текущего пользователя (--scope user) не удалась '
-          f'(код {result.returncode}). Пробую обычную установку: Windows может запросить '
-          f'права администратора.', flush=True)
+    code = result.returncode & 0xFFFFFFFF
+    if code != NO_APPLICABLE_INSTALLER:
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+    print(f'{package} has no per-user installer (--scope user, WinGet code 0x{code:08X}). '
+          f'Retrying the default install: Windows may ask for administrator rights.', flush=True)
     subprocess.run(command, check=True)
 
 

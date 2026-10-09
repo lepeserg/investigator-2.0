@@ -72,22 +72,41 @@ class WindowsSetupTests(unittest.TestCase):
         self.assertIn(system_tools.PACKAGES['ffmpeg'], command)
 
     def test_install_package_falls_back_to_default_scope(self):
-        calls = []
-        def fake_run(command, **kwargs):
-            calls.append((command, kwargs))
-            return subprocess.CompletedProcess(command, 1 if '--scope' in command else 0)
-        with patch.object(setup.shutil, 'which', return_value='winget'), patch.object(setup.subprocess, 'run', side_effect=fake_run), patch('sys.stdout', new_callable=io.StringIO) as out:
-            setup.install_package('tesseract')
-        self.assertEqual(len(calls), 2)
-        self.assertNotIn('--scope', calls[1][0])
-        self.assertTrue(calls[1][1].get('check'))
-        self.assertIn('--scope user', out.getvalue())
+        # Windows reports the HRESULT either signed or unsigned; both mean "no installer".
+        for code in (0x8A150010, 0x8A150010 - 2**32):
+            with self.subTest(code=code):
+                calls = []
+                def fake_run(command, **kwargs):
+                    calls.append((command, kwargs))
+                    return subprocess.CompletedProcess(command, code if '--scope' in command else 0)
+                with patch.object(setup.shutil, 'which', return_value='winget'), patch.object(setup.subprocess, 'run', side_effect=fake_run), patch('sys.stdout', new_callable=io.StringIO) as out:
+                    setup.install_package('tesseract')
+                self.assertEqual(len(calls), 2)
+                self.assertNotIn('--scope', calls[1][0])
+                self.assertTrue(calls[1][1].get('check'))
+                self.assertIn('--scope user', out.getvalue())
+                self.assertIn('0x8A150010', out.getvalue())
+
+    def test_install_package_other_failure_stops_without_retry(self):
+        # Declined agreement/UAC, network or hash errors must not trigger a second install.
+        for code in (1, 0x8A150011, -1978335212):
+            with self.subTest(code=code):
+                calls = []
+                def fake_run(command, **kwargs):
+                    calls.append(command)
+                    return subprocess.CompletedProcess(command, code)
+                with patch.object(setup.shutil, 'which', return_value='winget'), patch.object(setup.subprocess, 'run', side_effect=fake_run), patch('sys.stdout', new_callable=io.StringIO) as out:
+                    with self.assertRaises(subprocess.CalledProcessError) as ctx:
+                        setup.install_package('ffmpeg')
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(ctx.exception.returncode, code)
+                self.assertEqual(out.getvalue(), '')
 
     def test_install_package_fallback_failure_propagates(self):
         def fake_run(command, **kwargs):
             if kwargs.get('check'):
                 raise subprocess.CalledProcessError(5, command)
-            return subprocess.CompletedProcess(command, 1)
+            return subprocess.CompletedProcess(command, setup.NO_APPLICABLE_INSTALLER)
         with patch.object(setup.shutil, 'which', return_value='winget'), patch.object(setup.subprocess, 'run', side_effect=fake_run), patch('sys.stdout', new_callable=io.StringIO):
             with self.assertRaises(subprocess.CalledProcessError):
                 setup.install_package('soffice')
