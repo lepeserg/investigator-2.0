@@ -102,13 +102,26 @@ def _norm_fio(value):
     return _stem(m.group(1)) + "|" + re.sub(r"\s+", "", m.group(2)).lower()
 
 
+# Удалённый при рецензировании текст (w:delText) и коды полей (w:instrText) в документ не входят:
+# без их вырезания старые ФИО/даты из правок давали ложные расхождения. Правила — как в
+# style_lint._xml_text (коды полей прочь, w:tab → \t, сущности XML декодируются).
+_DEL_INSTR_RX = re.compile(r"<w:(delText|instrText)(?:\s[^>]*)?>.*?</w:\1>", re.S)
+
+
+def _xml_to_text(xml):
+    import html
+    xml = _DEL_INSTR_RX.sub("", xml)
+    xml = re.sub(r"</w:p>", "\n", xml)
+    xml = re.sub(r"<w:tab(?:\s[^>]*)?/>", "\t", xml)
+    return html.unescape(re.sub(r"<[^>]+>", "", xml))
+
+
 def _docx_text(path):
     try:
         with zipfile.ZipFile(path) as z:
             parts = [z.read(n).decode("utf-8", "ignore") for n in z.namelist()
                      if re.match(r"word/(document|header\d*|footer\d*)\.xml$", n)]
-        xml = re.sub(r"</w:p>", "\n", "\n".join(parts))
-        return re.sub(r"<[^>]+>", "", xml)
+        return _xml_to_text("\n".join(parts))
     except Exception:
         return None
 
