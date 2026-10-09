@@ -153,7 +153,10 @@ def cmd_transcribe(args):
     p.add_argument("--out", required=True, help="Папка или префикс результата внутри проекта")
     p.add_argument("--no-align", action="store_true", dest="no_align",
                    help="skip word-level alignment (faster, no ~1GB ru align model)")
-    if any(x == "--hf-token" or x.startswith("--hf-token=") for x in args):
+    # argparse принимает сокращения (--hf, --hf-tok); любое из них дало бы
+    # "unrecognized arguments: --hf-tok <токен>" с токеном в stderr. Поэтому
+    # отсекаем всё, что начинается с --hf, до разбора и значения не печатаем.
+    if any(x.startswith("--hf") for x in args):
         p.error("Ключ --hf-token удалён: токен в командной строке попадает в список процессов и историю PowerShell. "
                 "Сохраните токен локально: py -3.12 run.py setup_hf_access.py (Диспетчер учётных данных Windows) "
                 "или задайте переменную окружения HF_TOKEN.")

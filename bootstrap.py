@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parent
 PROFILES = ('base', 'ocr', 'audio')
 
 
+class EnvironmentNotPrepared(RuntimeError):
+    """Offline run: .venv is missing or does not match the requirements."""
+
+
 def python_path(root=ROOT):
     return root / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
 
@@ -58,7 +62,7 @@ def ensure(profile='base', offline=False, root=ROOT):
             print('Environment is already prepared.', flush=True)
             return executable
     if offline:
-        raise RuntimeError('Environment is not prepared. Run bootstrap.py with network access first.')
+        raise EnvironmentNotPrepared('Environment is not prepared. Run bootstrap.py with network access first.')
     if not executable.exists():
         print('Creating .venv ...', flush=True)
         venv.EnvBuilder(with_pip=True).create(root/'.venv')

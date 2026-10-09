@@ -88,13 +88,31 @@ class SetupTests(unittest.TestCase):
 
     def test_run_does_not_install_by_default(self):
         for argv in (['extract_docx.py'], ['--offline', 'extract_docx.py']):
-            ensure = unittest.mock.Mock(side_effect=RuntimeError('Environment is not prepared.'))
+            ensure = unittest.mock.Mock(side_effect=bootstrap.EnvironmentNotPrepared('Environment is not prepared.'))
             code, call, err = self._run_main(argv, ensure)
             ensure.assert_called_once_with('base', offline=True)
             call.assert_not_called()
-            self.assertNotEqual(code, 0)
+            self.assertEqual(code, 2)
             self.assertIn('start.cmd', err)
             self.assertIn('--install', err)
+
+    def test_other_bootstrap_errors_keep_code_1_without_install_hint(self):
+        for argv in (['extract_docx.py'], ['--install', 'extract_docx.py']):
+            ensure = unittest.mock.Mock(side_effect=RuntimeError('Use Python 3.12 for this release candidate.'))
+            code, call, err = self._run_main(argv, ensure)
+            call.assert_not_called()
+            self.assertEqual(code, 1)
+            self.assertIn('Use Python 3.12', err)
+            self.assertNotIn('start.cmd', err)
+
+    def test_offline_unprepared_environment_raises_specific_error(self):
+        with tempfile.TemporaryDirectory(dir=self.temp_root) as folder:
+            root = Path(folder)
+            (root/'requirements').mkdir()
+            (root/'requirements'/'base.txt').write_text('test-package==1\n')
+            with patch.object(bootstrap.sys, 'version_info', (3, 12, 0)):
+                with self.assertRaises(bootstrap.EnvironmentNotPrepared):
+                    bootstrap.ensure(offline=True, root=root)
 
     def test_run_installs_only_with_explicit_flag(self):
         ensure = unittest.mock.Mock(return_value=Path('python'))
@@ -148,6 +166,22 @@ class PathJoinTests(unittest.TestCase):
             env = system_tools.environment(config, ROOT)
         self.assertNotIn('', env['PATH'].split(os.pathsep))
 
+
+
+class HfTokenArgumentTests(unittest.TestCase):
+    def test_token_flag_and_abbreviations_rejected_without_echo(self):
+        sys.path.insert(0, str(ROOT/'investigator-2-0'/'scripts'))
+        import av_ingest
+        import io
+        secret = 'hf_SYNTHETIC_SECRET_123'
+        for argv in (['--hf-token', secret], ['--hf-token=' + secret], ['--hf-tok', secret],
+                     ['--hf', secret], ['--hf-t=' + secret]):
+            err = io.StringIO()
+            with patch('sys.stderr', err), self.assertRaises(SystemExit) as ctx:
+                av_ingest.cmd_transcribe(['in.wav', '--out', 'out', *argv])
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertNotIn(secret, err.getvalue())
+            self.assertIn('HF_TOKEN', err.getvalue())
 
 if __name__ == '__main__':
     unittest.main()

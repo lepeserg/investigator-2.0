@@ -60,9 +60,9 @@ def main():
         config = local_config.load()
         try:
             python = bootstrap.ensure('base', offline=not args.install)
-        except RuntimeError as exc:
-            if args.install:
-                raise
+        except bootstrap.EnvironmentNotPrepared as exc:
+            # Only a missing/incomplete .venv gets the start.cmd hint and code 2;
+            # other RuntimeErrors (e.g. wrong Python version) keep code 1 below.
             print(f'Cannot run tool: {exc}\n{MISSING_PACKAGES}', file=sys.stderr)
             return 2
         return subprocess.call([str(python), str(script), *args.args], env=environment(config))
