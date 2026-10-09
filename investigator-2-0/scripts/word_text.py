@@ -5,6 +5,7 @@ Without an explicit view, tracked changes stop reading until the user chooses.
 Views are reading aids and do not establish an approved document version.
 """
 from collections import Counter
+import html
 import re
 import zipfile
 from xml.etree import ElementTree as ET
@@ -17,6 +18,67 @@ CHANGES = {'ins': 'ВСТАВКА', 'del': 'УДАЛЕНИЕ',
 IGNORED = {'pPr', 'rPr', 'tblPr', 'tblGrid', 'trPr', 'tcPr', 'sectPr', 'instrText'}
 REVISION_TAGS = set(CHANGES) | {'pPrChange', 'rPrChange', 'tblPrChange',
                               'trPrChange', 'tcPrChange', 'sectPrChange'}
+
+
+# Быстрое извлечение текста из сырого WordprocessingML (регулярками, без разбора дерева) —
+# общее для check_tom, consistency_check, docx_integrity и style_lint. Единые правила:
+#   · текст берётся только из <w:t> (и <w:delText>, если include_deleted); <w:tab>, <w:tabs>,
+#     <w:t/> и прочие теги на «w:t» не цепляются; разметка рисунков и чисел вне w:t отбрасывается;
+#   · коды полей <w:instrText> не входят никогда;
+#   · <w:tab/> → tab ('\t'), табуляторы абзаца <w:tabs>…</w:tabs> — не текст;
+#   · </w:p> и пустой <w:p/> — конец абзаца ('\n' либо отдельный элемент списка);
+#   · сущности XML декодируются (html.unescape).
+# Исправления Word здесь не выбираются: вставки читаются как текст, удалённое — по флагу.
+# Полноценное чтение с выбором редакции — read_docx.
+_OPEN = r"(?:\s[^>]*?)?(?<!/)>"
+_XML_TEXT_RX = re.compile(
+    r"<w:tabs" + _OPEN + r".*?</w:tabs>"
+    r"|<w:(t|delText|instrText)" + _OPEN + r"(.*?)</w:\1>"
+    r"|<w:tab(?:\s[^>]*)?/>"
+    r"|</w:p>|<w:p(?:\s[^>]*)?/>", re.S)
+DOCX_TEXT_PARTS = r"document|header\d*|footer\d*"
+
+
+def xml_text(xml, *, include_deleted=False, paragraphs=False, tab="\t"):
+    """Текст куска WordprocessingML (document.xml, колонтитул, отдельный <w:p>).
+
+    paragraphs=False → строка, абзацы завершаются '\n';
+    paragraphs=True  → список текстов абзацев (хвост вне абзаца — только если непуст).
+    include_deleted=True — оставить удалённый при рецензировании текст (w:delText)."""
+    out, paras = [], []
+    for m in _XML_TEXT_RX.finditer(xml):
+        kind, token = m.group(1), m.group(0)
+        if kind:
+            if kind == "t" or (kind == "delText" and include_deleted):
+                out.append(html.unescape(m.group(2)))
+        elif token.startswith("<w:tabs"):
+            continue
+        elif token.startswith("<w:tab"):
+            out.append(tab)
+        elif paragraphs:
+            paras.append("".join(out))
+            out = []
+        else:
+            out.append("\n")
+    tail = "".join(out)
+    if not paragraphs:
+        return tail
+    if tail:
+        paras.append(tail)
+    return paras
+
+
+def docx_xml_text(path, parts=DOCX_TEXT_PARTS, *, sep="\n", **kwargs):
+    """xml_text частей word/<parts>.xml (порядок — как в архиве; parts — регулярка имени
+    без пути и расширения). Строки частей склеиваются sep, при paragraphs=True списки
+    абзацев сцепляются. Пакет только читается."""
+    with zipfile.ZipFile(path) as archive:
+        texts = [xml_text(archive.read(name).decode("utf-8", "replace"), **kwargs)
+                 for name in archive.namelist()
+                 if re.fullmatch(r"word/(?:" + parts + r")\.xml", name)]
+    if kwargs.get("paragraphs"):
+        return [para for part in texts for para in part]
+    return sep.join(texts)
 
 
 class RevisionChoiceRequired(ValueError):

@@ -182,6 +182,7 @@
 !/system_tools.py
 !/docs/WINDOWS-SETUP.md
 !/tests/test_windows_setup.py
+!/tests/test_docx_text.py
 !/tests/test_connect.py
 !/tests/test_documents.py
 !/tests/test_legal_style.py
