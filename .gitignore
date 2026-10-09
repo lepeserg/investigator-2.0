@@ -226,3 +226,5 @@
 !/tests/test_check_env.py
 
 !/docs/UPDATES.md
+
+!/tests/test_infra.py
