@@ -12,6 +12,8 @@ Obyazatel'nost' komponentov zadajut USTANOVLENNYE profili (base/documents/ocr/au
 metka .venv/investigator-install.json (bootstrap.py) i runtime/setup-report.json
 (setup_windows.py), libo argument --profile. Komponenty nevybrannyh profilej
 pechatajutsja kak «ne ustanovleno (profil' X ne vybran)» i kod vozvrata ne ronjajut.
+Bez metok (staraja/ruchnaja ustanovka) proverjaetsja prezhnij polnyj nabor:
+base + documents + ocr (audio, kak i ran'she, ne objazatelen).
 """
 import sys
 import os
@@ -182,6 +184,12 @@ PROFILES = ("base", "documents", "ocr", "audio")
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 INSTALL_STAMP = os.path.join(".venv", "investigator-install.json")    # пишет bootstrap.py
 SETUP_REPORT = os.path.join("runtime", "setup-report.json")           # пишет setup_windows.py
+# Без меток установщика (старая или ручная установка) проверяется прежний полный
+# набор, как до введения профилей: document core + Word/LibreOffice + OCR.
+# Audio и раньше был необязательным.
+LEGACY_PROFILES = ("base", "documents", "ocr")
+LEGACY_SOURCE = ("метки профилей не найдены — проверяется полный набор старой установки "
+                 "(base, documents, ocr)")
 
 
 def expand_profiles(names):
@@ -199,7 +207,7 @@ def expand_profiles(names):
 
 def detect_profiles(root=REPO_ROOT):
     """Установленные профили по меткам установщика.
-    Возвращает (profiles, source); без меток — ({'base'}, 'по умолчанию')."""
+    Возвращает (profiles, source); без меток — прежний полный набор LEGACY_PROFILES."""
     import json
     names, sources = [], []
     stamp = os.path.join(root, INSTALL_STAMP)
@@ -221,7 +229,7 @@ def detect_profiles(root=REPO_ROOT):
     except (OSError, ValueError):
         pass
     if not sources:
-        return {"base"}, "метка установки не найдена — по умолчанию base"
+        return expand_profiles(LEGACY_PROFILES), LEGACY_SOURCE
     return expand_profiles(names), ", ".join(sources)
 
 
@@ -281,13 +289,14 @@ def _parse_args(argv):
     ap = argparse.ArgumentParser(prog="check_env.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog="Без --profile профили берутся из .venv/investigator-install.json "
-                                        "и runtime/setup-report.json (иначе base). "
+                                        "и runtime/setup-report.json (без меток — base, documents, ocr). "
                                         "Код возврата: 0 — компоненты выбранных профилей на месте, 1 — чего-то не хватает.")
     ap.add_argument("--profile", action="append", choices=PROFILES + ("all",),
                     help="проверять как обязательный профиль (можно несколько раз)")
     if argv and argv[0] in ("/?", "help"):
         argv = ["--help"]
-    return ap.parse_args(argv)
+    # Неизвестные аргументы игнорируются, как и до введения --profile.
+    return ap.parse_known_args(argv)[0]
 
 
 def main(argv=None):
@@ -297,6 +306,9 @@ def main(argv=None):
     checks = []
     order = [p for p in PROFILES if p in profiles]
     print("Профили: %s (источник: %s)" % (", ".join(order), source))
+    if source == LEGACY_SOURCE:
+        print("Метки профилей (.venv/investigator-install.json, runtime/setup-report.json) не найдены — "
+              "проверяется полный набор: base, documents, ocr.")
 
     print("== Python packages (base) ==")
     for mod, pip in [("fitz", "pymupdf"), ("docx", "python-docx"),
@@ -314,20 +326,26 @@ def main(argv=None):
             print("  [-]    %s (не используется скриптами навыка; ставить только по нужде)" % pip)
 
     print("== Word COM / рендер (профиль documents: бланки-формы, статкарты ГВП, docx -> PDF) ==")
+    # Как в исходной проверке: на Windows Word COM обязателен сам по себе —
+    # LibreOffice НЕ заменяет его для бланков-форм (fill_formfields, post_release_gvp),
+    # он нужен только для рендера docx -> PDF. Вне Windows Word COM недоступен,
+    # и для рендера обязателен LibreOffice.
     w_ok, w_note = find_word_com()
+    lo = find_libreoffice()
     if w_ok is None:
         print("  [-]    win32com: %s" % w_note)
+        _print_check(checks, profiles, lo, "documents",
+                     "libreoffice/soffice: %s" % (lo or "не найден"))
     else:
-        print("  %s pywin32 / Word: %s" % ("[OK]  " if w_ok else "[-]   ", w_note))
-    lo = find_libreoffice()
-    print("  %s libreoffice/soffice: %s" % ("[OK]  " if lo else "[-]   ", lo or "не найден"))
-    _print_check(checks, profiles, bool(lo or w_ok), "documents",
-                 "Word или LibreOffice для рендера/форм")
+        _print_check(checks, profiles, w_ok, "documents", "pywin32 / Word: %s" % w_note,
+                     "Word COM обязателен для бланков-форм; LibreOffice его не заменяет. "
+                     + install_hint("documents"))
+        print("  %s libreoffice/soffice: %s" % (
+            "[OK]  " if lo else "[-]   ",
+            lo or "нет; при доступном Word использовать отдельный экземпляр Word COM"))
 
     print("== OCR (профиль ocr) ==")
     _print_check(checks, profiles, _has_module("ocrmypdf", heavy=True), "ocr", "ocrmypdf")
-    pdfium = _has_module("pypdfium2", heavy=True)
-    _print_check(checks, profiles, pdfium, "ocr", "pypdfium2 (движок PDF для OCRmyPDF 17+)")
     tess = find_tesseract()
     _print_check(checks, profiles, tess, "ocr", "tesseract: %s" % (tess or "not found"),
                  "start.cmd (setup-windows.ps1 -Profile ocr) — ставит Tesseract и языки")
@@ -341,8 +359,13 @@ def main(argv=None):
             pass
     _print_check(checks, profiles, rus, "ocr", "tesseract Russian (rus)",
                  "start.cmd (setup-windows.ps1 -Profile ocr) — докачает rus/eng/osd")
+    # Движок PDF для OCRmyPDF: достаточно ЛЮБОГО из двух — Ghostscript или pypdfium2.
     gs = find_ghostscript()
     print("  %s ghostscript: %s" % ("[OK]  " if gs else "[-]   ", gs or "optional: используется pypdfium2"))
+    pdfium = _has_module("pypdfium2", heavy=True)
+    print("  %s pypdfium2: альтернативный движок PDF для OCRmyPDF 17+" % ("[OK]  " if pdfium else "[-]   "))
+    _print_check(checks, profiles, bool(gs or pdfium), "ocr",
+                 "движок PDF для OCRmyPDF (ghostscript или pypdfium2)")
 
     print("== Донор-поиск (Everything / es) ==")
     es_state, es_note = "down", "es.exe не найден"
@@ -398,7 +421,9 @@ def main(argv=None):
     skipped = [p for p in PROFILES if p not in profiles]
     if skipped:
         print("Не выбраны (на код возврата не влияют): %s. Добавить: start.cmd или "
-              "py -3.12 bootstrap.py --profile <имя>" % ", ".join(skipped))
+              "setup-windows.ps1 -Profile <имя>; Python-пакеты вне Windows: "
+              "py -3.12 bootstrap.py --profile <base|ocr|audio> (профиль documents — "
+              "только через start.cmd / setup-windows.ps1)" % ", ".join(skipped))
     print("Донор-поиск (es): " + {
         "ok": "READY",
         "empty": "СЛОМАН ТИХО — индекс пуст, ответы es пустые; идти через corpus_search.py + os.walk",
@@ -415,7 +440,8 @@ def main(argv=None):
         need = [p for p in order if any(prof == p and not good for prof, good in checks)]
         print("Доустановка: start.cmd (меню) или setup-windows.ps1 -Profile <%s>; "
               "проверка без установки: setup-windows.ps1 -Profile <имя> -CheckOnly. "
-              "Python-пакеты вне Windows: py -3.12 bootstrap.py --profile <имя>." % "|".join(need))
+              "Python-пакеты вне Windows: py -3.12 bootstrap.py --profile <base|ocr|audio> "
+              "(documents bootstrap не принимает)." % "|".join(need))
 
     return 0 if ok else 1
 

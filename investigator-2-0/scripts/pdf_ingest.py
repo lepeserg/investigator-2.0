@@ -66,7 +66,9 @@ def _pop_pagecount(path):
         return None
 
 
-def _pop_text(path, start=None, end=None):
+def _pop_text(path, start=None, end=None, fail_on_timeout=False):
+    """fail_on_timeout=True (подкоманда text): таймаут — ошибка с кодом 3, а не пустой
+    вывод с кодом 0. Для info (проба первых страниц) таймаут по-прежнему даёт ""."""
     cmd = ["pdftotext", "-layout"]
     if start:
         cmd += ["-f", str(start)]
@@ -79,6 +81,8 @@ def _pop_text(path, start=None, end=None):
     except subprocess.TimeoutExpired:
         sys.stderr.write("pdftotext не ответил за 600 с — текст не извлечён. "
                          "Задай диапазон страниц поменьше.\n")
+        if fail_on_timeout:
+            sys.exit(3)
         return ""
     return r.stdout or ""
 
@@ -119,7 +123,7 @@ def _render_poppler(path, start, end, dpi, outdir):
 
 
 def _text_poppler(path, start, end):
-    sys.stdout.write(_pop_text(path, start, end))
+    sys.stdout.write(_pop_text(path, start, end, fail_on_timeout=True))
 
 
 # ---------------------------------------------------------------- fitz (PyMuPDF)

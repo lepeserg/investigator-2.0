@@ -132,14 +132,30 @@ def _recognize_page(tess, image, base, label):
         return handle.read()
 
 
+def _import_pymupdf():
+    """PyMuPDF нужен для разбора PDF на страницы. Без него — понятная ошибка, а не traceback."""
+    try:
+        import pymupdf as fitz
+    except ImportError:
+        raise OCRFailure('для постраничного OCR PDF нужен PyMuPDF (pymupdf), он не установлен. '
+                         'Установи базовый профиль: start.cmd или py -3.12 bootstrap.py --profile base')
+    return fitz
+
+
+def check_image_range(start, end):
+    """Изображение — одна страница: допустима только страница 1 (одинаково для всех движков)."""
+    if start not in (None, 1) or end not in (None, 1):
+        raise ValueError('Для изображения допустима только страница 1')
+
+
 def run_tesseract(tess, src, start, end):
-    import pymupdf as fitz
     out = []
     tmp = tempfile.mkdtemp(prefix="ocr_tess_")
     try:
         if start is not None and start < 1 or end is not None and end < 1:
             raise ValueError('Нумерация страниц начинается с 1')
         if _is_pdf(src):
+            fitz = _import_pymupdf()
             with fitz.open(src) as doc:
                 s, e = resolve_page_range(start or 1, end, doc.page_count)
                 for i in range(s - 1, e):
@@ -149,8 +165,7 @@ def run_tesseract(tess, src, start, end):
                     text = _recognize_page(tess, png, base, '%s, страница %d' % (src, i + 1))
                     out.append("\n----- стр. %d -----\n" % (i + 1) + text)
         else:
-            if start not in (None, 1) or end not in (None, 1):
-                raise ValueError('Для изображения допустима только страница 1')
+            check_image_range(start, end)
             out.append(_recognize_page(tess, src, os.path.join(tmp, 'o'), src))
         return "".join(out)
     finally:
@@ -173,6 +188,10 @@ def main():
             raise ValueError('Нумерация страниц начинается с 1')
         if start is not None and end is not None and start > end:
             raise ValueError('Начало диапазона позже конца')
+        # Проверка ДО выбора движка: marker для изображения диапазон игнорирует, и без
+        # этого marker и Tesseract вели бы себя по-разному на одной команде.
+        if not _is_pdf(src):
+            check_image_range(start, end)
     except ValueError as exc:
         sys.stderr.write('Ошибка диапазона: %s\n' % exc)
         return 2
