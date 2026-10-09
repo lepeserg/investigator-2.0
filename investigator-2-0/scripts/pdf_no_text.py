@@ -79,7 +79,7 @@ def inspect(path, sample=12, min_chars=20):
     Тип: «нет слоя» · «частично» · «есть». Ошибка чтения — тоже результат: битый
     или запаролённый файл поиском тоже не берётся, и знать о нём надо.
     """
-    import fitz
+    import pymupdf as fitz
     try:      # ворох «MuPDF error: syntax error…» от кривых сканов забивает отчёт
         fitz.TOOLS.mupdf_display_errors(False)
     except Exception:
@@ -184,7 +184,7 @@ def main():
         print("Нет такой папки: %s" % args.root)
         return 2
     try:
-        import fitz  # noqa: F401
+        import pymupdf as fitz  # noqa: F401
     except ImportError:
         print("Не установлен PyMuPDF (pip install pymupdf) — читать PDF нечем.")
         return 2

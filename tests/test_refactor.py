@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from unittest import mock
 import zipfile
+import gc
+import warnings
 from docx import Document
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -110,6 +112,21 @@ class RefactorTests(unittest.TestCase):
         with mock.patch.object(ocr_smart.subprocess,'run') as engine:
             with self.assertRaises(ValueError):ocr_smart.run_tesseract('tess','image.png',0,1)
             engine.assert_not_called()
+
+    def test_pymupdf_supported_import_has_no_deprecation_warning(self):
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter('always')
+            with self.assertRaises(ValueError):ocr_smart.run_tesseract('tess','image.png',0,1)
+            gc.collect()
+        self.assertFalse([w for w in captured if 'deprecated' in str(w.message).lower()])
+
+    def test_document_style_closes_local_constants_file(self):
+        doc=Document()
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter('always',ResourceWarning)
+            make_docx._setup_document_style(doc)
+            gc.collect()
+        self.assertFalse([w for w in captured if issubclass(w.category,ResourceWarning)])
 
     def letterhead(self,valid=True):
         f=self.folder/'renamed-local-blank.docx';doc=Document();table=doc.add_table(rows=1,cols=2)

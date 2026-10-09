@@ -452,7 +452,10 @@ def _setup_document_style(doc):
     try:
         import json as _json
         _cp = _find_constants_path()
-        _pf = _json.load(open(_cp, encoding="utf-8")).get("поля_страницы") if _cp else None
+        _pf = None
+        if _cp:
+            with open(_cp, encoding="utf-8") as _constants_file:
+                _pf = _json.load(_constants_file).get("поля_страницы")
         if isinstance(_pf, (list, tuple)) and len(_pf) == 4:
             _lm, _tm, _bm, _rm = (Cm(float(_pf[0])), Cm(float(_pf[1])),
                                   Cm(float(_pf[2])), Cm(float(_pf[3])))

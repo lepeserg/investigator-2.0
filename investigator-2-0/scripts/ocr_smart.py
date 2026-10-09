@@ -80,7 +80,7 @@ def _recognize_page(tess, image, base, label):
 
 
 def run_tesseract(tess, src, start, end):
-    import fitz
+    import pymupdf as fitz
     out = []
     tmp = tempfile.mkdtemp(prefix="ocr_tess_")
     try:

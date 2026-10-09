@@ -144,7 +144,7 @@ def guess_type(lines, cutoff, max_extra=None):
 
 def ocr_top(tess, doc, index, dpi, part, tmp):
     """OCR верхней части страницы. Возвращает все непустые строки сверху вниз."""
-    import fitz
+    import pymupdf as fitz
     page = doc.load_page(index)
     r = page.rect
     clip = fitz.Rect(r.x0, r.y0, r.x1, r.y0 + r.height * part)
@@ -231,7 +231,7 @@ def main():
                          "(см. check_env.py)\n")
         return 2
     try:
-        import fitz
+        import pymupdf as fitz
     except ImportError:
         sys.stderr.write("нужен pymupdf (pip install pymupdf)\n")
         return 2

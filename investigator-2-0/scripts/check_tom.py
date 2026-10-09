@@ -162,7 +162,7 @@ def parse_perechen(path):
 
 def load_toma(paths):
     """Возвращает [(номер тома, имя файла, страниц, полный путь)] по PDF, по возрастанию тома."""
-    import fitz
+    import pymupdf as fitz
     files = []
     for p in paths:
         if os.path.isdir(p):
@@ -363,7 +363,7 @@ def tom_spans(positions, numbering):
 def page_rotations(path):
     """Повороты страниц PDF: [0, 90, …]. Файл недоступен — None (не падаем)."""
     try:
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(path)
         rots = [doc[i].rotation for i in range(doc.page_count)]
         doc.close()
