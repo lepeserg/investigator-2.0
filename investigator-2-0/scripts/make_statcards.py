@@ -176,7 +176,14 @@ def _render_pdf(path):
     outdir = os.path.dirname(os.path.abspath(path)) or "."
     out_pdf = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".pdf")
     before = os.path.getmtime(out_pdf) if os.path.exists(out_pdf) else None
-    subprocess.run([soffice, "--headless", "--convert-to", "pdf", "--outdir", outdir, path], check=False)
+    try:
+        subprocess.run([soffice, "--headless", "--convert-to", "pdf", "--outdir", outdir, path],
+                       check=False, timeout=300)
+    except subprocess.TimeoutExpired:
+        # soffice зависает, если LibreOffice уже запущен (открыто окно / висит процесс).
+        print("soffice не ответил за 300 с: конвертация .docx->PDF прервана.\n"
+              "Закрой все окна LibreOffice (и процесс soffice в диспетчере задач) и повтори.")
+        return 1
     # ⚠ soffice возвращает 0 даже когда ничего не сконвертировал (напр. занят другим процессом),
     # поэтому успех подтверждаем ПОЯВЛЕНИЕМ/ОБНОВЛЕНИЕМ файла, а не кодом возврата.
     if not os.path.exists(out_pdf) or (before is not None and os.path.getmtime(out_pdf) == before):
@@ -203,6 +210,11 @@ if __name__ == "__main__":
         print("  python make_statcards.py pdf    <карта.docx>")
         print("  python make_statcards.py demo   <out_dir> <tpl_dir>")
         sys.exit(0)
+    if _cmd in ("grid", "verify", "check", "pdf") and len(sys.argv) < 3:
+        _what = "<карта.docx>" if _cmd == "pdf" else "<бланк.docx>"
+        print("Не указан путь к файлу.\nИспользование: python make_statcards.py %s %s%s"
+              % (_cmd, _what, " [f1|f12]" if _cmd in ("verify", "check") else ""))
+        sys.exit(2)
     if _cmd == "grid":
         _dump_grid(sys.argv[2]); sys.exit(0)
     if _cmd in ("verify", "check"):

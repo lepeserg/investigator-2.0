@@ -150,12 +150,18 @@ def ocr_top(tess, doc, index, dpi, part, tmp):
     clip = fitz.Rect(r.x0, r.y0, r.x1, r.y0 + r.height * part)
     png = os.path.join(tmp, "p%05d.png" % (index + 1))
     page.get_pixmap(dpi=dpi, clip=clip).save(png)
-    res = subprocess.run([tess, png, "stdout", "-l", "rus", "--psm", "6"],
-                         capture_output=True)
     try:
-        os.remove(png)
-    except OSError:
-        pass
+        res = subprocess.run([tess, png, "stdout", "-l", "rus", "--psm", "6"],
+                             capture_output=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("tesseract не ответил за 120 с на странице %d — страница пропущена.\n"
+                         % (index + 1))
+        return []
+    finally:
+        try:
+            os.remove(png)
+        except OSError:
+            pass
     out = []
     for ln in res.stdout.decode("utf-8", "replace").splitlines():
         ln = " ".join(ln.split())
