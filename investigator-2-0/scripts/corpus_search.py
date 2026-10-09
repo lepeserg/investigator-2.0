@@ -181,7 +181,7 @@ def main():
         if scanned < MIN_CORPUS_FILES:
             print(f"⛔ ВЫВОД О КОРПУСЕ НЕ ДЕЛАЕТСЯ: обойдено всего {scanned} файл(ов) — это не корпус.")
             print(f"   Похоже, --root указывает не туда (сейчас: {os.path.abspath(a.root)}).")
-            print(f"   Повторить с корнем корпуса, например:")
+            print("   Повторить с корнем корпуса, например:")
             print(f'     python corpus_search.py "{a.query[0]}" --root "{DEFAULT_ROOT}"')
             print("   ⛔ Пометку «подлежит установлению» по такому прогону НЕ ставить (правило 30).")
             sys.exit(2)

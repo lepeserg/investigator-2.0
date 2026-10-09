@@ -537,7 +537,7 @@ def cmd_map(specs, positions, numbering, out):
             out.append("  · ничего не нашлось: проверьте номер тома и диапазон")
             problems.append(("карта", "по «%s» в описи ничего нет" % spec))
             continue
-        cur = None
+        cur = prev = None
         for t, s in rows:
             if cur is None or s["pos"] != cur[1]["pos"] or t != cur[0]:
                 if cur:

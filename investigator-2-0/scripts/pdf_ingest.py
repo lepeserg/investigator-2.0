@@ -27,6 +27,7 @@ import sys
 import os
 import json
 import glob
+import importlib
 import subprocess
 
 
@@ -43,7 +44,8 @@ def _engine():
     if forced in ("fitz", "poppler"):
         return forced
     try:
-        import pymupdf as fitz  # noqa: F401
+        # проверка наличия PyMuPDF: модуль только импортируется, не используется
+        importlib.import_module("pymupdf")
         return "fitz"
     except Exception:
         return "poppler"

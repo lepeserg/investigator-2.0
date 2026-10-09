@@ -41,7 +41,6 @@ import re
 import sys
 import zipfile
 import argparse
-import tempfile
 import shutil
 import time
 from xml.etree import ElementTree as ET

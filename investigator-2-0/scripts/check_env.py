@@ -140,7 +140,8 @@ def find_word_com():
     if not sys.platform.startswith("win"):
         return None, "не Windows — путь через Word COM недоступен (это нормально)"
     try:
-        import win32com.client  # noqa: F401
+        # проверка наличия pywin32: модуль только импортируется, не используется
+        importlib.import_module("win32com.client")
     except Exception:
         return False, "нет pywin32 -> pip install pywin32"
     try:
