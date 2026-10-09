@@ -219,5 +219,6 @@
 !/Настроить доступ к модели.cmd
 
 !/tests/test_refactor.py
+!/tests/test_robustness.py
 
 !/docs/UPDATES.md

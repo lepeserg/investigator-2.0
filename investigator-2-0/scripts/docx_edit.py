@@ -231,11 +231,27 @@ def _save_atomic(doc, path, *, backup=True):
     while os.path.exists(tmp):  # уникальность при конкурентных правках в одном процессе
         _k += 1
         tmp = os.path.join(d, "~edit_%d_%d.docx" % (os.getpid(), _k))
-    doc.save(tmp)
-    if not zipfile.is_zipfile(tmp):
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise IOError("python-docx сохранил битый файл")
+    # Временный ~edit_*.docx удаляется при ЛЮБОМ сбое (doc.save, битый zip,
+    # бэкап, os.replace) — на диске не должно оставаться мусора рядом с делом.
+    replaced = False
+    try:
+        doc.save(tmp)
+        if not zipfile.is_zipfile(tmp):
+            raise IOError("python-docx сохранил битый файл")
+        _finish_save(tmp, path, backup)
+        replaced = True
+    finally:
+        if not replaced:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+    return path
+
+
+def _finish_save(tmp, path, backup):
+    """Метаданные -> бэкап -> os.replace(tmp, path). Очистку tmp делает _save_atomic."""
     # Свойства документа → профиль владельца (автор = следователь; никаких следов
     # python-docx и чужих авторов донора — стоячее указание владельца 07.08.2026,
     # см. doc_meta.py). Идемпотентно: на чистом файле no-op.
@@ -255,10 +271,7 @@ def _save_atomic(doc, path, *, backup=True):
     try:
         os.replace(tmp, path)
     except PermissionError as e:
-        if os.path.exists(tmp):
-            os.remove(tmp)
         raise DocxLockedError(_busy_message(path, e, stage="записать")) from e
-    return path
 
 
 # ---------- обход абзацев ----------

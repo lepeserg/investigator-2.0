@@ -65,18 +65,25 @@ def _save_atomic(doc, path):
     while os.path.exists(tmp):
         k += 1
         tmp = os.path.join(d, "~statcard_%d_%d.docx" % (os.getpid(), k))
-    doc.save(tmp)
-    if not zipfile.is_zipfile(tmp):
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        sys.exit("python-docx сохранил битый файл — оригинал НЕ тронут.")
+    # tmp удаляется при ЛЮБОМ сбое (doc.save, битый zip, os.replace, SystemExit).
+    replaced = False
     try:
-        os.replace(tmp, path)
-    except PermissionError:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        sys.exit("Не удалось записать «%s» — вероятно, открыт в Word. "
-                 "Закрой документ и повтори — оригинал НЕ тронут." % os.path.basename(path))
+        doc.save(tmp)
+        if not zipfile.is_zipfile(tmp):
+            sys.exit("python-docx сохранил битый файл — оригинал НЕ тронут.")
+        try:
+            os.replace(tmp, path)
+        except PermissionError:
+            sys.exit("Не удалось записать «%s» — вероятно, открыт в Word. "
+                     "Закрой документ и повтори — оригинал НЕ тронут." % os.path.basename(path))
+        replaced = True
+    finally:
+        if not replaced:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
     return path
 
 
