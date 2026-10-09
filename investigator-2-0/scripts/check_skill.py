@@ -490,10 +490,12 @@ def check(root):
         problems.append(f"ссылка на подпункт §{n}: раздел §{n.rsplit('.', 1)[0]} есть, "
                         f"а самого подпункта {n} нигде не объявлено")
 
-    # 6. После разделения на навыки полный реестр правил находится в 24-rules.md.
-    # Проверяем существование каждого номера, а не только верхнюю границу.
+    # 6. После разделения на навыки полный реестр правил находится в 24-rules.md и его
+    # частях 24-rules-*.md. Проверяем существование каждого номера, а не только верхнюю границу.
     rules_path = os.path.join(refs_dir, "24-rules.md")
-    rules_text = md_files.get(rules_path, txt)
+    rules_parts = [v for k, v in sorted(md_files.items())
+                   if os.path.dirname(k) == refs_dir and os.path.basename(k).startswith("24-rules-")]
+    rules_text = "\n".join([md_files.get(rules_path, txt)] + rules_parts)
     rules = {int(r) for r in re.findall(r"^(\d{1,2})\.\s+", rules_text, re.M)}
     for r in sorted({int(x) for x in RULE_REF.findall(all_text)}):
         if r not in rules:
