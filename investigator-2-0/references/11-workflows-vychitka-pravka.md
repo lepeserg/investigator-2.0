@@ -51,7 +51,7 @@
 
 #### Шаг 4. Открой соответствующий файл-референс
 
-В зависимости от жанра — открой `references/05-...md` … `09-...md` (по таблице из `04-classifier.md`).
+В зависимости от жанра — открой `references/05-...md` … `09-...md` (по таблицам §4.2 в `04-classifier-triggers-1.md` и `04-classifier-triggers-2.md`, см. «Карта файла» `04-classifier.md`).
 
 Открой также **обязательно**:
 - `references/02-format.md` (формат) и `references/02a-format-profile.md` (персональный формат-профиль);

@@ -31,6 +31,7 @@
 | §16.17 | 16.17. ФОРМАТ: СЕКЦИИ 12 ПТ, ПОДПИСЬ НЕ ВИСИТ ★ | [references/16-pitfalls-papka-vzyatki-figuranty.md](16-pitfalls-papka-vzyatki-figuranty.md) | секции 12 пт, подписной блок не висит |
 | §16.18 | 16.18. Локальные сведения и образцы | [references/16-pitfalls-papka-vzyatki-figuranty.md](16-pitfalls-papka-vzyatki-figuranty.md) | сводка ошибок с реального дела (скан папок, коды донора в Ф-1, ВУД по факту, целостность) |
 | §16.19 | 16.19. ДЕФЕКТНЫЙ ДОНОР — НЕ ТИРАЖИРОВАТЬ (грабли объяснения) ★ | [references/16-pitfalls-donory-rekvizity.md](16-pitfalls-donory-rekvizity.md) | дефектный донор — не тиражировать |
+| §16.20 | 16.20. ПЕРЕРАБОТКА ДОКУМЕНТА СТАДИИ СТ. 144 ПОД ВОЗБУЖДЁННОЕ ДЕЛО (грабли локального образца, 28.07.2026) ★ | [references/16-pitfalls-donory-rekvizity.md](16-pitfalls-donory-rekvizity.md) | переработка документа стадии ст. 144 под возбуждённое дело |
 | §16.21 | 16.21. ЧУЖАЯ РЕГИСТРАЦИЯ (КУСП И ИНЫЕ ОРГАНЫ) В НАШЕМ ДОКУМЕНТЕ ★ | [references/16-pitfalls-donory-rekvizity.md](16-pitfalls-donory-rekvizity.md) | чужая регистрация (КУСП и иные органы) в нашем документе |
 | §16.22 | 16.22. ПОКАЗАНИЯ В ОЗ «ПО ПАМЯТИ» — ВМЕСТО ПРОТОКОЛА ★ | [references/16-pitfalls-donory-rekvizity.md](16-pitfalls-donory-rekvizity.md) | показания в ОЗ «по памяти» вместо протокола |
 | §16.23 | 16.23. ПОЛ УЧАСТНИКА ОПРЕДЕЛЁН ПО ИНИЦИАЛАМ ★ | [references/16-pitfalls-donory-rekvizity.md](16-pitfalls-donory-rekvizity.md) | пол участника определён по инициалам |
