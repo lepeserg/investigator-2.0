@@ -35,6 +35,7 @@
     python check_skill.py [<корень навыка>]        # по умолчанию — папка на уровень выше scripts/
 Код возврата: 0 — чисто; 1 — есть замечания.
 """
+import glob
 import os
 import re
 import sys
@@ -195,10 +196,23 @@ CARDS_REQUIRED = PASSPORT_REQUIRED - {"18-bank-analysis.md"}
 SECTION_SPLIT = re.compile(r"(?m)^## (\d{2}[A-Za-zА-Яа-я]?\.[\d.]*\d)\.")
 
 
+def _card_files(refs_dir):
+    """Файлы с разделами-жанрами: сам файл из CARDS_REQUIRED и его части `<имя>-*.md`.
+
+    Крупные справочники разрезаны: паспорт и карта остаются в исходном файле, разделы
+    уезжают в части. Без частей проверка карточек молча перестала бы работать."""
+    names = set()
+    for name in CARDS_REQUIRED:
+        names.add(name)
+        stem = name[:-3]
+        names.update(os.path.basename(p) for p in glob.glob(os.path.join(refs_dir, stem + "-*.md")))
+    return sorted(names)
+
+
 def _check_cards(refs_dir):
     """У каждого раздела-жанра есть карточка из четырёх полей либо пометка «не жанр»."""
     problems = []
-    for name in sorted(CARDS_REQUIRED):
+    for name in _card_files(refs_dir):
         path = os.path.join(refs_dir, name)
         if not os.path.isfile(path):
             continue
