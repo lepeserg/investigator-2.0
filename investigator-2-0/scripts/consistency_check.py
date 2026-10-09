@@ -41,6 +41,7 @@ import sys
 import zipfile
 
 from word_text import docx_xml_text, xml_text
+from _common import find_tool
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -130,8 +131,15 @@ def _docx_text(path):
 
 
 def _doc_text(path):
+    # antiword ищется как в corpus_search (_common.find_tool: PATH и типовые папки установки);
+    # не найден — .doc пропускается и попадает в счётчик «.doc пропущено без antiword».
+    # Грубый откат cp1251 из corpus_search здесь НЕ берётся: мусор из бинарника дал бы ложные
+    # расхождения ФИО/сумм.
+    antiword = find_tool("antiword")
+    if not antiword:
+        return None
     try:
-        r = subprocess.run(["antiword", "-w", "0", "-m", "UTF-8.txt", path],
+        r = subprocess.run([antiword, "-w", "0", "-m", "UTF-8.txt", path],
                            capture_output=True, timeout=60)
         if r.returncode == 0 and r.stdout:
             return r.stdout.decode("utf-8", "replace")

@@ -104,19 +104,18 @@ def _extract_paragraphs(path):
                     out.append(cell.text)
         out += _hf_paragraphs(d)
         return out
-    except Exception as e:
-        print(f"⚠ python-docx не открыл файл ({e}) — проверяется только тело document.xml, "
-              "таблицы и колонтитулы не прочитаны", file=sys.stderr)
-        # Откат: вытащить текст из word/document.xml
+    except Exception as docx_err:
+        # Откат: тело из word/document.xml по общим правилам word_text.xml_text
+        # (w:delText и коды полей w:instrText в текст не попадают)
         try:
-            xml = zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
+            with zipfile.ZipFile(path) as z:
+                xml = z.read("word/document.xml").decode("utf-8")
         except Exception as e:
             print(f"Не удалось открыть файл как .docx: {e}")
             sys.exit(2)
-        xml = re.sub(r"</w:p>", "\n", xml)
-        xml = re.sub(r"<[^>]+>", "", xml)
-        import html
-        return html.unescape(xml).split("\n")
+        print(f"⚠ python-docx не открыл файл ({docx_err}) — проверяется только тело "
+              "document.xml, колонтитулы не прочитаны", file=sys.stderr)
+        return xml_text(xml, paragraphs=True)
 
 
 def _extract_statcard(path):
