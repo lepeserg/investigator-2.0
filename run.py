@@ -41,21 +41,35 @@ def select_script(name):
     return path
 
 
+MISSING_PACKAGES = ('Python-окружение не подготовлено или неполное. run.py по умолчанию ничего не устанавливает.\n'
+                    'Запустите start.cmd или явно разрешите установку: py -3.12 run.py --install <скрипт> ...')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--offline', action='store_true', help='Do not install missing Python packages')
+    parser.add_argument('--install', action='store_true',
+                        help='Allow installing missing Python packages from PyPI (off by default)')
+    parser.add_argument('--offline', action='store_true',
+                        help='Accepted for compatibility; offline is now the default')
     parser.add_argument('tool', help='Script name, e.g. extract_docx.py')
     parser.add_argument('args', nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.install and args.offline:
+        parser.error('--install and --offline are mutually exclusive')
     try:
         script = select_script(args.tool)
         config = local_config.load()
-        python = bootstrap.ensure('base', args.offline)
+        try:
+            python = bootstrap.ensure('base', offline=not args.install)
+        except RuntimeError as exc:
+            if args.install:
+                raise
+            print(f'Cannot run tool: {exc}\n{MISSING_PACKAGES}', file=sys.stderr)
+            return 2
         return subprocess.call([str(python), str(script), *args.args], env=environment(config))
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f'Cannot run tool: {exc}', file=sys.stderr)
         return 1
-    return 0
 
 
 if __name__ == '__main__':

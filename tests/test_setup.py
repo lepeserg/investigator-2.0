@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +73,33 @@ class SetupTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run.select_script('../../bootstrap.py')
         self.assertEqual(run.select_script('extract_docx.py').name, 'extract_docx.py')
+
+    def _run_main(self, argv, ensure):
+        with patch.object(sys, 'argv', ['run.py', *argv]), \
+                patch.object(run.local_config, 'load', return_value={}), \
+                patch.object(run.bootstrap, 'ensure', ensure), \
+                patch.object(run, 'environment', return_value={}), \
+                patch.object(run.subprocess, 'call', return_value=0) as call, \
+                patch('sys.stderr') as stderr:
+            code = run.main()
+        return code, call, ''.join(str(c.args[0]) for c in stderr.write.call_args_list if c.args)
+
+    def test_run_does_not_install_by_default(self):
+        for argv in (['extract_docx.py'], ['--offline', 'extract_docx.py']):
+            ensure = unittest.mock.Mock(side_effect=RuntimeError('Environment is not prepared.'))
+            code, call, err = self._run_main(argv, ensure)
+            ensure.assert_called_once_with('base', offline=True)
+            call.assert_not_called()
+            self.assertNotEqual(code, 0)
+            self.assertIn('start.cmd', err)
+            self.assertIn('--install', err)
+
+    def test_run_installs_only_with_explicit_flag(self):
+        ensure = unittest.mock.Mock(return_value=Path('python'))
+        code, call, _ = self._run_main(['--install', 'extract_docx.py', '--help'], ensure)
+        ensure.assert_called_once_with('base', offline=False)
+        self.assertEqual(code, 0)
+        self.assertEqual(call.call_args.args[0][2:], ['--help'])
 
     def test_offline_never_creates_environment_or_installs(self):
         with tempfile.TemporaryDirectory(dir=self.temp_root) as folder:
