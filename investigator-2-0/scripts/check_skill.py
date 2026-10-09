@@ -223,7 +223,7 @@ def _check_cards(refs_dir):
 
 
 def _check_passports(refs_dir):
-    """Паспорт жанра: есть · стоит ПЕРВЫМ · полон (пять блоков) · несёт запрет Шага 3."""
+    """Паспорт жанра: есть · стоит ПЕРВЫМ · полон (пять блоков) · требует полного чтения паспорта."""
     problems, notes = [], []
     if not os.path.isdir(refs_dir):
         return problems, notes
@@ -236,7 +236,7 @@ def _check_passports(refs_dir):
         required = name in PASSPORT_REQUIRED
         pos = t.find(PASSPORT_HEAD)
         if pos < 0:
-            msg = f"references/{name}: нет ПАСПОРТА ЖАНРА (Шаг 3 — голова файла из пяти блоков)"
+            msg = f"references/{name}: нет ПАСПОРТА ЖАНРА (голова файла из пяти блоков)"
             (problems if required else notes).append(msg)
             continue
         # паспорт обязан стоять ДО тела: иначе он не голова, а очередной раздел в середине
@@ -251,9 +251,10 @@ def _check_passports(refs_dir):
         if missing:
             msg = (f"references/{name}: в паспорте нет блоков — " + " · ".join(missing))
             (problems if required else notes).append(msg)
-        if "Шаг 3" not in body:
-            notes.append(f"references/{name}: в паспорте нет ссылки на Шаг 3 "
-                         f"(«читается ПОЛНОСТЬЮ и ДО первого действия»)")
+        # Прежний «Шаг 3» остался только в архивном диспетчере; в паспорте требуем само правило.
+        if "читается ПОЛНОСТЬЮ и ДО первого действия" not in body:
+            notes.append(f"references/{name}: в паспорте нет правила "
+                         f"«паспорт читается ПОЛНОСТЬЮ и ДО первого действия»")
     return problems, notes
 
 
