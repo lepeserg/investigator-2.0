@@ -42,6 +42,8 @@ import re
 import sys
 import zipfile
 
+from word_text import xml_text
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -108,14 +110,9 @@ def _docx_paragraphs(path):
 
 
 def _xml_paragraphs(xml):
-    """Тексты абзацев из document.xml. Шаблон <w:t> не цепляет <w:tab/> и <w:tabs>
-    (как docx_integrity._text); сущности XML декодирует html.unescape."""
-    import html
-    out = []
-    for para in re.findall(r"<w:p[ >].*?</w:p>", xml, re.S):
-        txt = "".join(re.findall(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", para, re.S))
-        out.append(html.unescape(txt))
-    return out
+    """Тексты абзацев из document.xml — общими правилами word_text.xml_text
+    (удалённое при рецензировании и коды полей не входят; <w:tab/> здесь не пишется)."""
+    return xml_text(xml, paragraphs=True, tab="")
 
 
 def parse_perechen(path):

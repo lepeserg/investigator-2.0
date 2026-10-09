@@ -40,6 +40,8 @@ import subprocess
 import sys
 import zipfile
 
+from word_text import docx_xml_text, xml_text
+
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -103,25 +105,15 @@ def _norm_fio(value):
 
 
 # Удалённый при рецензировании текст (w:delText) и коды полей (w:instrText) в документ не входят:
-# без их вырезания старые ФИО/даты из правок давали ложные расхождения. Правила — как в
-# style_lint._xml_text (коды полей прочь, w:tab → \t, сущности XML декодируются).
-_DEL_INSTR_RX = re.compile(r"<w:(delText|instrText)(?:\s[^>]*)?>.*?</w:\1>", re.S)
-
-
+# без их вырезания старые ФИО/даты из правок давали ложные расхождения. Правила — общие,
+# word_text.xml_text (как у check_tom, docx_integrity, style_lint).
 def _xml_to_text(xml):
-    import html
-    xml = _DEL_INSTR_RX.sub("", xml)
-    xml = re.sub(r"</w:p>", "\n", xml)
-    xml = re.sub(r"<w:tab(?:\s[^>]*)?/>", "\t", xml)
-    return html.unescape(re.sub(r"<[^>]+>", "", xml))
+    return xml_text(xml)
 
 
 def _docx_text(path):
     try:
-        with zipfile.ZipFile(path) as z:
-            parts = [z.read(n).decode("utf-8", "ignore") for n in z.namelist()
-                     if re.match(r"word/(document|header\d*|footer\d*)\.xml$", n)]
-        return _xml_to_text("\n".join(parts))
+        return docx_xml_text(path)
     except Exception:
         return None
 

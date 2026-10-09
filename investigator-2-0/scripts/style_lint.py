@@ -44,6 +44,8 @@ import re
 import sys
 import zipfile
 
+from word_text import xml_text
+
 def _utf8_stdout():
     'UTF-8 на выводе + errors="replace".'
     try:
@@ -156,8 +158,6 @@ def _extract_statcard(path):
 # может ни дописать часть, ни пересобрать архив.
 # ⚠ Контроль (правило 40): состав `namelist()` и sha256 файла сверены ДО и ПОСЛЕ прогона линтера
 #   на `_tests/t_hdr.docx` и на боевом ВУД с тремя колонтитулами — совпадают побайтно.
-_TAG_RX = re.compile(r"<[^>]+>")
-_INSTR_RX = re.compile(r"<w:instrText[^>]*>.*?</w:instrText>", re.S)
 _HF_PART_RX = re.compile(r"^word/(?:header|footer)\d*\.xml$")
 _PARA_RX = re.compile(r"<w:p[ >].*?</w:p>|<w:p/>", re.S)
 _PPR_RX = re.compile(r"<w:pPr>.*?</w:pPr>", re.S)
@@ -166,12 +166,9 @@ _KEEPNEXT_RX = re.compile(r"<w:keepNext(?![^>]*w:val=\"(?:0|false)\")")
 
 
 def _xml_text(xml):
-    """Текст из куска WordprocessingML: коды полей (PAGE, MERGEFORMAT) выброшены, w:tab → \\t."""
-    import html
-    xml = _INSTR_RX.sub(" ", xml)
-    xml = re.sub(r"</w:p>", "\n", xml)
-    xml = re.sub(r"<w:tab[^>]*/>", "\t", xml)
-    return html.unescape(_TAG_RX.sub("", xml))
+    """Текст из куска WordprocessingML — общие правила word_text.xml_text: коды полей (PAGE,
+    MERGEFORMAT) и удалённое при рецензировании выброшены, w:tab → \\t."""
+    return xml_text(xml)
 
 
 # Модель «знаки → строки → страницы». Разбиение на страницы делает Word при вёрстке, поэтому это

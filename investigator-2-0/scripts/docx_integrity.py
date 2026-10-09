@@ -46,6 +46,8 @@ import shutil
 import time
 from xml.etree import ElementTree as ET
 
+from word_text import xml_text
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -65,7 +67,9 @@ ID_RE = re.compile(r'w:id="(\d+)"')
 
 
 def _text(doc):
-    return "".join(re.findall(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", doc, re.S))
+    """Текст для сверки до/после починки: общие правила word_text.xml_text, причём удалённое
+    при рецензировании (w:delText) тоже сверяется — починка не вправе трогать и его."""
+    return xml_text(doc, include_deleted=True)
 
 
 def parts_of(path):
