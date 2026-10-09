@@ -26,6 +26,10 @@
  15. Строки "text" в ```python-шаблонах references (то, что генератор кладёт В ДОКУМЕНТ) не несут
      длинного тире вне плейсхолдера {…} и сдвоенного «ст. ст.» — иначе линтер ловит это уже в каждом
      документе заново (09.09.2026: 27 тире в шаблонах семи жанров, донорский хвост с «ст. ст.» в шести).
+ 16. Нет ПУСТЫХ разделов: за заголовком сразу идёт заголовок того же или более высокого уровня
+     (заголовки внутри блоков кода не считаются). Пустой «Фатальные ошибки» читается как «ошибок нет».
+ 17. Ссылки «Шаг N» указывают на шаги, объявленные в основном `SKILL.md` (архивный
+     `legacy-dispatcher.md` и собственная нумерация шагов внутри файла не в счёт).
 
 Запуск:
     python check_skill.py [<корень навыка>]        # по умолчанию — папка на уровень выше scripts/
@@ -288,6 +292,70 @@ def _strip_docs(src):
             for i in range(a, min(b, len(out[r]))):
                 out[r][i] = " "
     return "\n".join("".join(l) for l in out)
+
+
+# ── ПУСТЫЕ РАЗДЕЛЫ ────────────────────────────────────────────────────────────────────────
+# Повод (ревизия 09.10.2026): после обезличивания в девяти паспортах остался заголовок
+# «### 3. ФАТАЛЬНЫЕ ОШИБКИ ЖАНРА» без текста, а в 24-rules.md — пустая «Карта правил».
+# Модель читает пустой блок как «фатальных ошибок нет» — это хуже, чем отсутствие блока.
+# Архив (legacy-dispatcher.md) не правится и не проверяется.
+MD_HEADING = re.compile(r"^(#{1,6})\s+\S")
+MD_FENCE = re.compile(r"^\s*(```|~~~)")
+MD_HRULE = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
+ARCHIVE_MD = {"legacy-dispatcher.md"}
+
+
+def _empty_sections(text):
+    """[(номер строки, заголовок)] разделов без текста и подзаголовков до следующего заголовка
+    того же или более высокого уровня. Код в ```-блоке — содержимое, а не заголовки;
+    горизонтальная черта `---` содержимым не считается."""
+    heads, content, fence = [], set(), False
+    for i, line in enumerate(text.split("\n")):
+        if MD_FENCE.match(line):
+            fence = not fence
+            content.add(i)
+            continue
+        if fence:
+            content.add(i)
+            continue
+        m = MD_HEADING.match(line)
+        if m:
+            heads.append((i, len(m.group(1)), line.strip()))
+        elif line.strip() and not MD_HRULE.match(line):
+            content.add(i)
+    empty = []
+    for k, (i, level, line) in enumerate(heads):
+        end = next((j for j, lv, _ in heads[k + 1:] if lv <= level), None)
+        end = float("inf") if end is None else end
+        if any(i < c < end for c in content) or any(i < j < end for j, _, _ in heads[k + 1:]):
+            continue
+        empty.append((i + 1, line))
+    return empty
+
+
+# ── ССЫЛКИ НА ШАГИ ОСНОВНОГО SKILL.md ─────────────────────────────────────────────────────
+# Повод (ревизия 09.10.2026): после сжатия SKILL.md в нём остались шаги 6, 9 и 10, а 18 паспортов
+# по-прежнему отсылали к «Шагу 3», правила — к «Шагу 9.0-bis» и «Шагу 8». Эти шаги живут только
+# в архивном диспетчере, который целиком не загружается, — ссылка вела в пустоту.
+# Ссылкой на шаг навыка считается «Шаг N» с заглавной буквы (шаг, Шага, Шаге, Шагу, Шагом).
+# Если файл сам объявляет «Шаг N» в начале строки (свой алгоритм: 11-workflows, 14-plenums,
+# сценарий Г в 25-assembly), ссылки на этот номер в нём — локальные и не проверяются.
+_STEP_NUM = r"(\d+(?:\.\d+)?(?:-[a-z]+)?)"
+SKILL_STEP_DECL = re.compile(r"^#{1,6}\s+(?:⛔\s*)?Шаг\s+" + _STEP_NUM, re.M)
+LOCAL_STEP_DECL = re.compile(r"^[\s#*>⛔]*Шаг\s+" + _STEP_NUM, re.M)
+STEP_REF = re.compile(r"Шаг(?:а|е|у|ом)?\s+" + _STEP_NUM)
+
+
+def _strip_fences(text):
+    """Заменить строки внутри ```-блоков пустыми, сохранив нумерацию строк."""
+    out, fence = [], False
+    for line in text.split("\n"):
+        if MD_FENCE.match(line):
+            fence = not fence
+            out.append("")
+            continue
+        out.append("" if fence else line)
+    return "\n".join(out)
 
 
 def _read(p):
@@ -617,6 +685,33 @@ def check(root):
         if not any(h == r or h.startswith(r + ".") for h in odd_heads):
             problems.append(f"ссылка на несуществующий раздел: §{r} (форма с буквой — "
                             f"проверка 4 её не видит)")
+
+    # 16. ПУСТЫЕ РАЗДЕЛЫ (см. комментарий у _empty_sections)
+    for path, t in md_files.items():
+        name = os.path.basename(path)
+        if name in ARCHIVE_MD:
+            continue
+        for ln, head in _empty_sections(t):
+            problems.append(f"{name}:{ln}: пустой раздел «{head}» — за заголовком сразу идёт "
+                            f"заголовок того же или более высокого уровня; дай содержание или "
+                            f"отсылку к месту, где оно есть, либо убери заголовок")
+
+    # 17. ССЫЛКИ «Шаг N» НА НЕСУЩЕСТВУЮЩИЙ ШАГ ОСНОВНОГО SKILL.md (см. комментарий у STEP_REF)
+    skill_steps = set(SKILL_STEP_DECL.findall(txt))
+    for path, t in md_files.items():
+        name = os.path.basename(path)
+        if name in ARCHIVE_MD or name.lower() == "changelog.md":
+            continue
+        body = _strip_fences(t)
+        local = set(LOCAL_STEP_DECL.findall(body)) if path != skill_md else set()
+        for ln, line in enumerate(body.split("\n"), 1):
+            for num in STEP_REF.findall(line):
+                if num in skill_steps or num in local:
+                    continue
+                have = ", ".join(sorted(skill_steps, key=lambda s: [int(x) for x in re.findall(r"\d+", s)])) or "нет"
+                problems.append(f"{name}:{ln}: ссылка на «Шаг {num}», которого нет в основном SKILL.md "
+                                f"(шаги там: {have}); прежняя нумерация — только в архиве "
+                                f"legacy-dispatcher.md, сошлись на действующий раздел")
 
     # 14. ФАЙЛЫ, КОТОРЫЕ РАНЬШЕ НЕ ПРОВЕРЯЛИСЬ ВООБЩЕ (ревизия 22.08.2026):
     #     константы.json, адресаты.json, scripts/requirements.txt, шаблон бланка.
