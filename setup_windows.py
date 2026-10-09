@@ -55,9 +55,18 @@ def install_package(name):
     winget = shutil.which('winget')
     if not winget:
         raise RuntimeError('WinGet missing. Install/update App Installer: https://aka.ms/getwinget ; then retry.')
+    package = system_tools.PACKAGES[name]
     # Keep license/source prompts visible; never bypass installer hash validation.
-    subprocess.run([winget, 'install', '--id', system_tools.PACKAGES[name], '--exact',
-                    '--source', 'winget'], check=True)
+    command = [winget, 'install', '--id', package, '--exact', '--source', 'winget']
+    # Work PCs often deny admin rights: try a per-user install first. Packages without
+    # a per-user installer (e.g. machine-wide NSIS/MSI) fail here and fall back below.
+    result = subprocess.run(command + ['--scope', 'user'])
+    if result.returncode == 0:
+        return
+    print(f'Установка {package} только для текущего пользователя (--scope user) не удалась '
+          f'(код {result.returncode}). Пробую обычную установку: Windows может запросить '
+          f'права администратора.', flush=True)
+    subprocess.run(command, check=True)
 
 
 def download_language(language, folder, opener=urllib.request.urlopen):
