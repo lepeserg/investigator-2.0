@@ -220,5 +220,6 @@
 
 !/tests/test_refactor.py
 !/tests/test_robustness.py
+!/tests/test_check_env.py
 
 !/docs/UPDATES.md
