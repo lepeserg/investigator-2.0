@@ -38,21 +38,69 @@ def find_tesseract():
     return p if os.path.isfile(p) else None
 
 
+# Предел времени: marker на большом скане идёт десятки минут, но не часами; зависание без предела
+# блокировало бы сессию. Tesseract считается постранично — ему хватает минут на страницу.
+MARKER_TIMEOUT = 3600
+TESSERACT_PAGE_TIMEOUT = 600
+
+
+def resolve_page_range(start, end, page_count):
+    """Единая семантика диапазона для всех движков: (первая, последняя) с 1, включительно.
+
+    Только начало → до конца документа; только конец → с первой страницы; конец обрезается по
+    page_count. Без start и end → None (весь документ). page_count None (неизвестно) допустим
+    лишь при явном конце."""
+    if start is None and end is None:
+        return None
+    if start is not None and start < 1 or end is not None and end < 1:
+        raise ValueError('Нумерация страниц начинается с 1')
+    s = start or 1
+    if page_count is None:
+        if end is None:
+            raise ValueError('Не удалось определить число страниц для диапазона «с %d до конца»' % s)
+        e = end
+    else:
+        e = min(end or page_count, page_count)
+    if s > e:
+        raise ValueError('Диапазон страниц пуст или выходит за пределы PDF')
+    return s, e
+
+
+def _is_pdf(src):
+    return os.path.splitext(src)[1].lower() == ".pdf"
+
+
+def _pdf_page_count(src):
+    import pymupdf as fitz
+    with fitz.open(src) as doc:
+        return doc.page_count
+
+
 def run_marker(marker, src, start, end):
     tmp = tempfile.mkdtemp(prefix="ocr_marker_")
     try:
         cmd = [marker, src, "--force_ocr", "--disable_ocr_math",
                "--output_format", "markdown", "--output_dir", tmp]
-        if start or end:
-            a = start or 1
-            b = end or a
+        # Для изображения диапазон не имеет смысла (одна страница) — page_range не передаём.
+        if (start or end) and _is_pdf(src):
+            count = None
+            try:
+                count = _pdf_page_count(src)
+            except ImportError:
+                pass
+            a, b = resolve_page_range(start, end, count)
             cmd += ["--page_range", "%d-%d" % (a - 1, b - 1)]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=MARKER_TIMEOUT)
         mds = glob.glob(os.path.join(tmp, "**", "*.md"), recursive=True)
         if r.returncode == 0 and mds:
             with open(mds[0], encoding="utf-8") as f:
                 return f.read()
         sys.stderr.write((r.stderr or "")[-600:] + "\n")
+        return None
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("marker не завершился за %d с (MARKER_TIMEOUT) — процесс прерван. "
+                         "Дели скан на диапазоны страниц поменьше.\n" % MARKER_TIMEOUT)
         return None
     except Exception as e:
         sys.stderr.write("marker error: %s\n" % e)
@@ -67,7 +115,12 @@ class OCRFailure(RuntimeError):
 
 def _recognize_page(tess, image, base, label):
     """Check the engine and its expected text artifact before reading it."""
-    process = subprocess.run([tess, image, base, "-l", "rus"], capture_output=True)
+    try:
+        process = subprocess.run([tess, image, base, "-l", "rus"], capture_output=True,
+                                 timeout=TESSERACT_PAGE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise OCRFailure('%s: Tesseract не завершился за %d с — процесс прерван' %
+                         (label, TESSERACT_PAGE_TIMEOUT))
     if process.returncode != 0:
         diagnostic = (process.stderr or process.stdout or b'').decode('utf-8', 'replace').strip()
         raise OCRFailure('%s: Tesseract завершился с кодом %s. %s' %
@@ -86,12 +139,9 @@ def run_tesseract(tess, src, start, end):
     try:
         if start is not None and start < 1 or end is not None and end < 1:
             raise ValueError('Нумерация страниц начинается с 1')
-        if os.path.splitext(src)[1].lower() == ".pdf":
+        if _is_pdf(src):
             with fitz.open(src) as doc:
-                s = start or 1
-                e = min(end or doc.page_count, doc.page_count)
-                if s > e:
-                    raise ValueError('Диапазон страниц пуст или выходит за пределы PDF')
+                s, e = resolve_page_range(start or 1, end, doc.page_count)
                 for i in range(s - 1, e):
                     png = os.path.join(tmp, "p%04d.png" % (i + 1))
                     doc.load_page(i).get_pixmap(dpi=300).save(png)

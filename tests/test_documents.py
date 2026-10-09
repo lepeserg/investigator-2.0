@@ -14,6 +14,7 @@ import docx_integrity
 import make_docx
 import check_tom
 import consistency_check
+import ocr_smart
 import zipfile
 
 
@@ -53,7 +54,6 @@ class DocumentTests(unittest.TestCase):
         self.assertFalse(out.exists())
 
 
-
     def _docx_with_body(self, name, body_xml):
         """Synthetic DOCX whose document.xml body is replaced with raw WordprocessingML."""
         base=self.root/'base.docx';Document().save(base)
@@ -89,5 +89,15 @@ class DocumentTests(unittest.TestCase):
              '<w:r><w:t>1.</w:t></w:r><w:r><w:tab/></w:r>'
              '<w:r><w:t xml:space="preserve">Протокол &amp; опись &quot;А&quot;</w:t></w:r></w:p></w:body>')
         self.assertEqual(check_tom._xml_paragraphs(xml),['1.Протокол & опись "А"'])
+
+    def test_ocr_page_range_is_engine_independent(self):
+        r=ocr_smart.resolve_page_range
+        self.assertIsNone(r(None,None,10))
+        self.assertEqual(r(3,None,10),(3,10))
+        self.assertEqual(r(None,4,10),(1,4))
+        self.assertEqual(r(2,50,10),(2,10))
+        self.assertEqual(r(2,5,None),(2,5))
+        for bad in ((11,None,10),(0,None,10),(5,2,10),(3,None,None)):
+            with self.assertRaises(ValueError):r(*bad)
 
 if __name__=='__main__':unittest.main()
