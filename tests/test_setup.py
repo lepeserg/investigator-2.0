@@ -2,6 +2,7 @@
 from pathlib import Path
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 import bootstrap
 import local_config
 import run
+import system_tools
 
 
 class SetupTests(unittest.TestCase):
@@ -127,6 +129,24 @@ class SetupTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     bootstrap.ensure(root=root)
             self.assertFalse(stamp.exists())
+
+
+class PathJoinTests(unittest.TestCase):
+    def test_no_extra_paths_keeps_path_unchanged(self):
+        self.assertEqual(system_tools.prepend_path([], 'a' + os.pathsep + 'b'), 'a' + os.pathsep + 'b')
+
+    def test_no_leading_or_trailing_empty_element(self):
+        self.assertEqual(system_tools.prepend_path([Path('x')], ''), 'x')
+        self.assertEqual(system_tools.prepend_path([], ''), '')
+        joined = system_tools.prepend_path([Path('x'), Path('y')], 'z')
+        self.assertEqual(joined.split(os.pathsep), ['x', 'y', 'z'])
+
+    def test_environment_without_extra_paths_has_no_empty_element(self):
+        config = {'tools': {'extra_path': [], 'tessdata_prefix': ''}}
+        with patch.dict(os.environ, {'PATH': '/usr/bin'}), \
+                patch.object(system_tools, 'search_paths', return_value=[]):
+            env = system_tools.environment(config, ROOT)
+        self.assertNotIn('', env['PATH'].split(os.pathsep))
 
 
 if __name__ == '__main__':

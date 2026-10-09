@@ -2,7 +2,6 @@
 from pathlib import Path
 import argparse
 import json
-import os
 import subprocess
 import sys
 import bootstrap
@@ -18,7 +17,7 @@ def environment(config):
     temp.mkdir(parents=True, exist_ok=True)
     env = system_tools.environment(config, ROOT)
     paths = [bootstrap.python_path().parent]
-    env['PATH'] = os.pathsep.join(str(p) for p in paths if p.exists()) + os.pathsep + env.get('PATH', '')
+    env['PATH'] = system_tools.prepend_path((p for p in paths if p.exists()), env.get('PATH', ''))
     env.update(PYTHONIOENCODING='utf-8', PYTHONUTF8='1', PYTHONDONTWRITEBYTECODE='1',
                TEMP=str(temp), TMP=str(temp), HF_HOME=str(runtime/'models'),
                HF_HUB_DISABLE_TELEMETRY='1', PYANNOTE_METRICS_ENABLED='0',
