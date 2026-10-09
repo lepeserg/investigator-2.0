@@ -85,6 +85,19 @@ class FindToolTests(unittest.TestCase):
         with patch.object(_common, '_config_extra_path', return_value=[str(Path(extra).parent)]):
             self.assertEqual(_common.find_tool('tesseract'), extra)
 
+    def test_order_matches_run_py_path(self):
+        """extra_path → Program Files → WinGet\\Links, as system_tools.environment builds PATH."""
+        os.environ['LOCALAPPDATA'] = str(self.root/'local')
+        self.roots = [str(self.root/'pf')]
+        links = self._touch('local', 'Microsoft', 'WinGet', 'Links', 'tesseract')
+        pf = self._touch('pf', 'Tesseract-OCR', 'tesseract.exe')
+        self.assertEqual(_common.find_tool('tesseract'), pf)
+        extra = self._touch('extra', 'tesseract')
+        with patch.object(_common, '_config_extra_path', return_value=[str(Path(extra).parent)]):
+            self.assertEqual(_common.find_tool('tesseract'), extra)
+        os.remove(pf)
+        self.assertEqual(_common.find_tool('tesseract'), links)
+
     def test_not_found(self):
         with patch.dict(_common._TOOLS['antiword'], fixed=()):
             self.assertIsNone(_common.find_tool('antiword'))

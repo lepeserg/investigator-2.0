@@ -123,8 +123,18 @@ def _warn_unread(path, why):
 
 
 def _docx_text(path):
+    # errors="ignore" — как было здесь до общего word_text: U+FFFD внутри слова разрывал бы ФИО.
     try:
-        return docx_xml_text(path)
+        txt = docx_xml_text(path, errors="ignore")
+        if not txt.strip():
+            # Текст в document.xml есть, а правила word_text его не нашли (чужая разметка) —
+            # молча «пустой» документ выпал бы из сверки без следа.
+            with zipfile.ZipFile(path) as z:
+                raw = z.read("word/document.xml").decode("utf-8", "ignore")
+            if re.sub(r"<[^>]+>", "", raw).strip():
+                _warn_unread(path, "в word/document.xml есть текст, но он не распознан")
+                return None
+        return txt
     except Exception as e:
         _warn_unread(path, e)
         return None
@@ -132,7 +142,8 @@ def _docx_text(path):
 
 def _doc_text(path):
     # antiword ищется как в corpus_search (_common.find_tool: PATH и типовые папки установки);
-    # не найден — .doc пропускается и попадает в счётчик «.doc пропущено без antiword».
+    # не найден или не прочитал файл — .doc пропускается и попадает в счётчик «.doc пропущено»
+    # (сбой antiword к тому же называется в stderr).
     # Грубый откат cp1251 из corpus_search здесь НЕ берётся: мусор из бинарника дал бы ложные
     # расхождения ФИО/сумм.
     antiword = find_tool("antiword")
@@ -143,6 +154,9 @@ def _doc_text(path):
                            capture_output=True, timeout=60)
         if r.returncode == 0 and r.stdout:
             return r.stdout.decode("utf-8", "replace")
+        why = (r.stderr or b"").decode("utf-8", "replace").strip()
+        _warn_unread(path, "antiword: код %s%s" % (r.returncode, ": " + why if why else "")
+                     if r.returncode else "antiword: пустой вывод")
     except Exception as e:
         _warn_unread(path, "antiword: %s" % e)
     return None
@@ -664,7 +678,8 @@ def main():
     only = set(x.strip() for x in a.only.split(",")) if a.only else None
     data, scanned, skipped, money_people = collect(docs, only)
     print(f"consistency_check: просмотрено документов {scanned}"
-          + (f"; .doc пропущено без antiword: {skipped}" if skipped else ""))
+          + (f"; .doc пропущено (нет antiword или он не прочитал файл): {skipped}"
+             if skipped else ""))
     if a.pair:
         print("режим --pair: сверяются ровно два файла — "
               + " ↔ ".join(os.path.basename(p) for p in a.pair))

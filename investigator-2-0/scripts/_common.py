@@ -2,8 +2,8 @@
 """_common.py — общие помощники скриптов investigator-sk (не запускается сам по себе).
 
   find_tool(name)          — поиск внешней программы (tesseract / soffice / antiword):
-                             PATH → config.local.json tools.extra_path и WinGet\\Links →
-                             стандартные папки установки Windows → маски.
+                             PATH → config.local.json tools.extra_path → стандартные
+                             папки установки Windows → WinGet\\Links → маски (порядок run.py).
   check_locked(path)       — «документ открыт в Word / занят» → DocxLockedError.
   save_atomic(doc, path)   — tmp в той же папке → проверка zip → os.replace; tmp удаляется
                              при любом сбое.
@@ -73,44 +73,56 @@ def _config_extra_path():
         return []
 
 
-def extra_dirs():
-    """Доп. папки, где программа лежит под своим именем: config tools.extra_path и
-    %LOCALAPPDATA%\\Microsoft\\WinGet\\Links (ярлыки winget, как system_tools.search_paths)."""
-    dirs = _config_extra_path()
+def _winget_links():
+    """%LOCALAPPDATA%\\Microsoft\\WinGet\\Links (ярлыки winget, как system_tools.search_paths)."""
     local = os.environ.get("LOCALAPPDATA")
-    if local:
-        dirs.append(os.path.join(local, "Microsoft", "WinGet", "Links"))
-    return [d for d in dict.fromkeys(dirs) if os.path.isdir(d)]
+    return [os.path.join(local, "Microsoft", "WinGet", "Links")] if local else []
 
 
 def tool_candidates(name):
     """Упорядоченные пути-кандидаты в папках установки (без проверки существования)."""
     spec = _TOOLS[_ALIASES.get(name, name)]
-    cands = []
-    for root in _install_roots():
-        for rel in spec["rel"]:
-            cands.append(os.path.join(root, *rel))
-    cands.extend(spec["fixed"])
-    return list(dict.fromkeys(cands))
+    return list(dict.fromkeys(_install_candidates(spec) + list(spec["fixed"])))
+
+
+def _install_candidates(spec):
+    return [os.path.join(root, *rel) for root in _install_roots() for rel in spec["rel"]]
+
+
+def _which_in(names, dirs):
+    dirs = [d for d in dict.fromkeys(dirs) if os.path.isdir(d)]
+    if dirs:
+        for n in names:
+            p = shutil.which(n, path=os.pathsep.join(dirs))
+            if p:
+                return p
+    return None
 
 
 def find_tool(name):
     """Полный путь к программе или None. name: 'tesseract' | 'soffice' ('libreoffice') | 'antiword'.
 
-    Порядок: PATH → extra_dirs() → tool_candidates() → маски (берётся последняя по
-    сортировке — самая новая версия)."""
+    Порядок — как PATH, который собирает run.py (system_tools.environment/search_paths), чтобы
+    при прямом запуске и через run.py выбиралась одна и та же программа:
+    PATH → config tools.extra_path → папки установки (Program Files*, LOCALAPPDATA) →
+    WinGet\\Links → фиксированные пути → маски (берётся последняя по сортировке — самая новая
+    версия). PATH первым — как в прежних копиях поиска (через run.py он уже начинается с
+    тех же папок в том же порядке)."""
     spec = _TOOLS[_ALIASES.get(name, name)]
     for n in spec["names"]:
         p = shutil.which(n)
         if p:
             return p
-    extra = extra_dirs()
-    if extra:
-        for n in spec["names"]:
-            p = shutil.which(n, path=os.pathsep.join(extra))
-            if p:
-                return p
-    for c in tool_candidates(name):
+    p = _which_in(spec["names"], _config_extra_path())
+    if p:
+        return p
+    for c in _install_candidates(spec):
+        if os.path.isfile(c):
+            return c
+    p = _which_in(spec["names"], _winget_links())
+    if p:
+        return p
+    for c in spec["fixed"]:
         if os.path.isfile(c):
             return c
     for pat in spec["globs"]:
