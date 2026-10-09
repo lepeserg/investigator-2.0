@@ -80,7 +80,6 @@
 !/investigator-2-0/SKILL.md
 !/investigator-2-0/agents/openai.yaml
 !/investigator-2-0/assets/README.md
-!/investigator-2-0/references/00-scope-and-triggers.md
 !/investigator-2-0/references/01-identity.md
 !/investigator-2-0/references/01a-environment.md
 !/investigator-2-0/references/02-format.md
@@ -92,14 +91,12 @@
 !/investigator-2-0/references/04-classifier.md
 !/investigator-2-0/references/05-genres-lifecycle.md
 !/investigator-2-0/references/05b-prodlenie-proverki-krsp.md
-!/investigator-2-0/references/06-genres-investigative.md
 !/investigator-2-0/references/06a-doprosy.md
 !/investigator-2-0/references/06b-ppm-opoznanie.md
 !/investigator-2-0/references/06c-osmotry-vyemka-obysk.md
 !/investigator-2-0/references/06d-ekspertizy.md
 !/investigator-2-0/references/06e-veshchdoki.md
 !/investigator-2-0/references/06f-obshchie.md
-!/investigator-2-0/references/07-genres-charging.md
 !/investigator-2-0/references/07a-pds-dopros.md
 !/investigator-2-0/references/07b-okonchanie-oz.md
 !/investigator-2-0/references/07c-izmenenie-obvineniya.md
@@ -112,7 +109,6 @@
 !/investigator-2-0/licenses/
 /investigator-2-0/licenses/*
 !/investigator-2-0/licenses/pravo-grammatika-LICENSE.txt
-!/investigator-2-0/references/08-genres-correspondence.md
 !/investigator-2-0/references/08a-zaprosy.md
 !/investigator-2-0/references/08b-soprovody.md
 !/investigator-2-0/references/08c-porucheniya-povestki.md
