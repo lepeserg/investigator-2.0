@@ -69,8 +69,10 @@ def ensure(profile='base', offline=False, root=ROOT):
     # A stale stamp must not survive a partially successful pip run.
     if stamp.exists():
         stamp.unlink()
-    command = [str(executable), '-m', 'pip', '--disable-pip-version-check', 'install',
-               '--index-url', 'https://pypi.org/simple']
+    # No hard-coded --index-url: pip falls back to PyPI by itself, while a corporate
+    # mirror/proxy from pip.ini / PIP_INDEX_URL and an offline wheelhouse from
+    # PIP_FIND_LINKS (+ PIP_NO_INDEX=1) keep working.
+    command = [str(executable), '-m', 'pip', '--disable-pip-version-check', 'install']
     for item in sorted(profiles):
         command.extend(('-r', str(root/'requirements'/f'{item}.txt')))
     print('Installing profiles: ' + ', '.join(sorted(profiles)), flush=True)
