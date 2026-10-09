@@ -126,6 +126,18 @@ def _word_pids():
     return {int(m) for m in re.findall(r'"WINWORD\.EXE","(\d+)"', out)}
 
 
+def _hwnd_pid(app):
+    """PID процесса по окну СВОЕГО COM-экземпляра (Application.Hwnd).
+
+    None, если Hwnd недоступен (старый Word) или нет pywin32."""
+    try:
+        import win32process
+        pid = win32process.GetWindowThreadProcessId(int(app.Hwnd))[1]
+        return pid if pid > 0 else None
+    except Exception:
+        return None
+
+
 class _Word:
     """Word COM с гарантированной уборкой (в т.ч. при исключении).
 
@@ -147,7 +159,16 @@ class _Word:
         self._foreign = _word_pids()          # Word'ы владельца — их не трогаем
         # DispatchEx = ВСЕГДА новый процесс, не подключение к чужому сеансу
         self.app = win32.DispatchEx("Word.Application")  # НЕ gencache: виснет на первом запуске
-        self._mine = _word_pids() - self._foreign
+        # ⛔ СВОЙ PID берём по окну своего экземпляра. Разница двух снимков tasklist — гонка:
+        # Word, открытый владельцем между снимками, попадал в «свои» и убивался в __exit__.
+        pid = _hwnd_pid(self.app)
+        if pid:
+            self._mine = {pid}
+        else:
+            # запасной путь (Hwnd недоступен): разница снимков, но ТОЛЬКО если новый PID
+            # ровно один; больше одного — не знаем, какой наш, и не убиваем ничего
+            new_pids = _word_pids() - self._foreign
+            self._mine = new_pids if len(new_pids) == 1 else set()
         self.app.Visible = False
         self.app.DisplayAlerts = 0
         # ⛔ Автозамена Word ПОРТИТ значение: «е» превращалось в "е" (прямые кавычки),
