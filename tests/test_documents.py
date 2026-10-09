@@ -12,6 +12,7 @@ sys.path.insert(0,str(ROOT/'investigator-2-0/scripts'))
 import docx_edit
 import docx_integrity
 import make_docx
+import check_tom
 import consistency_check
 import zipfile
 
@@ -82,5 +83,11 @@ class DocumentTests(unittest.TestCase):
         self.assertNotIn('01.01.2020',text)
         self.assertNotIn('MERGEFORMAT',text)
         self.assertIn('ООО "Ромашка" & Ко',text)
+
+    def test_check_tom_fallback_ignores_tab_elements(self):
+        xml=('<w:body><w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr>'
+             '<w:r><w:t>1.</w:t></w:r><w:r><w:tab/></w:r>'
+             '<w:r><w:t xml:space="preserve">Протокол &amp; опись &quot;А&quot;</w:t></w:r></w:p></w:body>')
+        self.assertEqual(check_tom._xml_paragraphs(xml),['1.Протокол & опись "А"'])
 
 if __name__=='__main__':unittest.main()

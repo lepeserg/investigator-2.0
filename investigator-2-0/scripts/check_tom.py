@@ -104,12 +104,17 @@ def _docx_paragraphs(path):
         pass
     with zipfile.ZipFile(path) as z:
         xml = z.read("word/document.xml").decode("utf-8", "replace")
+    return _xml_paragraphs(xml)
+
+
+def _xml_paragraphs(xml):
+    """Тексты абзацев из document.xml. Шаблон <w:t> не цепляет <w:tab/> и <w:tabs>
+    (как docx_integrity._text); сущности XML декодирует html.unescape."""
+    import html
     out = []
     for para in re.findall(r"<w:p[ >].*?</w:p>", xml, re.S):
-        txt = "".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", para, re.S))
-        txt = (txt.replace("&amp;", "&").replace("&lt;", "<")
-                  .replace("&gt;", ">").replace("&quot;", '"').replace("&#39;", "'"))
-        out.append(txt)
+        txt = "".join(re.findall(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", para, re.S))
+        out.append(html.unescape(txt))
     return out
 
 
