@@ -370,7 +370,9 @@ def page_rotations(path):
         rots = [doc[i].rotation for i in range(doc.page_count)]
         doc.close()
         return rots
-    except Exception:
+    except Exception as e:
+        print("⚠ повороты страниц не прочитаны, сверка поворотов пропущена: %s (%s)" % (path, e),
+              file=sys.stderr)
         return None
 
 

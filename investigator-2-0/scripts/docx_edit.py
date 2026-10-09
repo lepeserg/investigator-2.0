@@ -225,7 +225,9 @@ def _textbox_paragraphs(container):
         return
     try:
         boxes = el.findall(".//" + qn("w:txbxContent"))
-    except Exception:
+    except Exception as e:
+        print("⚠ надписи (w:txbxContent) не прочитаны — дата/исх. № в рамках НЕ обработаны: %s" % e,
+              file=sys.stderr)
         return
     for box in boxes:
         for p_el in box.findall(qn("w:p")):
@@ -247,7 +249,9 @@ def _hdrftr_exists(part):
     `is_linked_to_previous` читает ссылку в sectPr и ничего не создаёт — проверяем ТОЛЬКО им."""
     try:
         return not part.is_linked_to_previous
-    except Exception:
+    except Exception as e:
+        print("⚠ колонтитул не прочитан и пропущен (его текст НЕ обработан): %s" % e,
+              file=sys.stderr)
         return False
 
 

@@ -104,7 +104,9 @@ def _extract_paragraphs(path):
                     out.append(cell.text)
         out += _hf_paragraphs(d)
         return out
-    except Exception:
+    except Exception as e:
+        print(f"⚠ python-docx не открыл файл ({e}) — проверяется только тело document.xml, "
+              "таблицы и колонтитулы не прочитаны", file=sys.stderr)
         # Откат: вытащить текст из word/document.xml
         try:
             xml = zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
@@ -1261,8 +1263,8 @@ def lint(path, genre=None, allow_foreign_reg=False, status_verified=None, legal_
                              "угловой штамп донора — старая редакция; эталон — бумажный бланк 384 ВСО "
                              "(02a «Модель бланка» п. 2): привести операцией {\"op\": \"stamp\"} (docx_edit)",
                              _m.group(0)))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠ проверка углового штампа не выполнена: {e}", file=sys.stderr)
 
     # ⛔ СТРУКТУРНЫЕ следы ИИ/рабочего процесса (правило 38): примечания, непринятые правки,
     # скрытый текст, маркеры инструмента в свойствах. Замер на 400 файлах корпуса:
@@ -1291,8 +1293,9 @@ def lint(path, genre=None, allow_foreign_reg=False, status_verified=None, legal_
             findings.append((0, "след-ИИ-структура",
                              "свойства файла несут маркер инструмента (python-docx / LibreOffice-"
                              "песочница) — прогнать scripts/doc_meta.py clean", ""))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠ проверка структурных следов ИИ (примечания, правки, скрытый текст) "
+              f"не выполнена: {e}", file=sys.stderr)
 
     # Локальный пример исключён из публичной поставки.
     # наследовала жирный лид «Показания свидетеля …» на весь абзац. Заголовки (КАПС) и

@@ -70,7 +70,8 @@ def extract_text(path, revisions=None):
             return open(path, encoding="utf-8", errors="ignore").read()
     except RevisionChoiceRequired:
         raise
-    except Exception:
+    except Exception as e:
+        print(f"⚠ не прочитан, в поиск не вошёл: {path} ({e})", file=sys.stderr)
         return None
     return None
 

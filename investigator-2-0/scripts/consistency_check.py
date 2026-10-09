@@ -111,10 +111,21 @@ def _xml_to_text(xml):
     return xml_text(xml)
 
 
+_WARNED = set()
+
+
+def _warn_unread(path, why):
+    '«файл не прочитан» в stderr — один раз на файл (extract зовётся несколькими проверками).'
+    if path not in _WARNED:
+        _WARNED.add(path)
+        print("⚠ не прочитан, в сверку не вошёл: %s (%s)" % (path, why), file=sys.stderr)
+
+
 def _docx_text(path):
     try:
         return docx_xml_text(path)
-    except Exception:
+    except Exception as e:
+        _warn_unread(path, e)
         return None
 
 
@@ -124,8 +135,8 @@ def _doc_text(path):
                            capture_output=True, timeout=60)
         if r.returncode == 0 and r.stdout:
             return r.stdout.decode("utf-8", "replace")
-    except Exception:
-        pass
+    except Exception as e:
+        _warn_unread(path, "antiword: %s" % e)
     return None
 
 
