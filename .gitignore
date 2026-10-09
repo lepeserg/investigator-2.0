@@ -183,6 +183,7 @@
 !/docs/WINDOWS-SETUP.md
 !/tests/test_windows_setup.py
 !/tests/test_docx_text.py
+!/tests/test_common.py
 !/tests/test_connect.py
 !/tests/test_documents.py
 !/tests/test_legal_style.py
@@ -214,6 +215,7 @@
 *.mp4
 
 !/investigator-2-0/scripts/word_text.py
+!/investigator-2-0/scripts/_common.py
 
 !/investigator-2-0/references/03c-legal-grammar.md
 

@@ -21,6 +21,9 @@ import glob
 import shutil
 import importlib
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import find_tool  # noqa: E402
+
 
 def _utf8():
     try:
@@ -30,14 +33,7 @@ def _utf8():
 
 
 def find_tesseract():
-    p = shutil.which("tesseract")
-    if p:
-        return p
-    for c in (r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-              r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
-        if os.path.exists(c):
-            return c
-    return None
+    return find_tool("tesseract")
 
 
 def find_ghostscript():
@@ -67,28 +63,8 @@ def find_ffmpeg():
 
 def find_libreoffice():
     """soffice в PATH обычно НЕТ — рабочая ветка это поиск по стандартным папкам
-    установки. Раньше пути были записаны с ЗАДВОЕННЫМИ слэшами внутри raw-строк
-    (r"C:\\Program Files\\..."), такого пути на диске не существует, и
-    LibreOffice не находился никогда (ревизия 22.08.2026)."""
-    for name in ("soffice", "soffice.exe", "libreoffice"):
-        p = shutil.which(name)
-        if p:
-            return p
-    cands = [r"C:\Program Files\LibreOffice\program\soffice.exe",
-             r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"]
-    for env in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "LOCALAPPDATA"):
-        base = os.environ.get(env)
-        if base:
-            cands.append(os.path.join(base, "LibreOffice", "program", "soffice.exe"))
-    for c in cands:
-        if os.path.exists(c):
-            return c
-    for pat in (r"C:\Program Files\LibreOffice*\program\soffice.exe",
-                r"C:\Program Files (x86)\LibreOffice*\program\soffice.exe"):
-        hits = glob.glob(pat)
-        if hits:
-            return sorted(hits)[-1]
-    return None
+    установки (единый перебор: _common.find_tool)."""
+    return find_tool("soffice")
 
 
 def find_es():

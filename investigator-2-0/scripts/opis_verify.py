@@ -40,6 +40,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import find_tool  # noqa: E402
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -87,13 +90,7 @@ ANCHORS = [
 
 
 def find_tesseract():
-    if shutil.which("tesseract"):
-        return "tesseract"
-    for c in (r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-              r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
-        if os.path.isfile(c):
-            return c
-    return None
+    return find_tool("tesseract")
 
 
 def normalize(s):

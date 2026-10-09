@@ -8,6 +8,9 @@
 Для больших сканов вызывай постранично: ocr_smart.py \"<pdf>\" 1 8, затем 9 16 и т.д."""
 import sys, os, subprocess, tempfile, glob, shutil
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import find_tool  # noqa: E402
+
 
 def _utf8():
     try:
@@ -32,10 +35,7 @@ def find_marker():
 
 
 def find_tesseract():
-    if shutil.which("tesseract"):
-        return "tesseract"
-    p = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    return p if os.path.isfile(p) else None
+    return find_tool("tesseract")
 
 
 # Предел времени: marker на большом скане идёт десятки минут, но не часами; зависание без предела

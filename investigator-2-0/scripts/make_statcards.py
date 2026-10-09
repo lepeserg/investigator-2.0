@@ -149,19 +149,11 @@ def _find_soffice():
     ⚠ Одного `shutil.which` МАЛО: установщик LibreOffice на Windows себя в PATH не прописывает,
     поэтому рендер объявлялся недоступным при установленном LibreOffice (найдено 05.08.2026 —
     из-за этого в навык попала запись «LibreOffice НЕ установлен, рендер-сверка недоступна»).
-    Тот же перебор уже был в check_env.find_libreoffice() — приводим к одному поведению."""
-    import os, shutil
-    for name in ("soffice", "soffice.exe", "libreoffice"):
-        p = shutil.which(name)
-        if p:
-            return p
-    for cand in (r"C:\Program Files\LibreOffice\program\soffice.exe",
-                 r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
-                 "/usr/bin/soffice", "/usr/bin/libreoffice",
-                 "/Applications/LibreOffice.app/Contents/MacOS/soffice"):
-        if os.path.exists(cand):
-            return cand
-    return None
+    Поиск единый для всех скриптов — _common.find_tool."""
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _common import find_tool
+    return find_tool("soffice")
 
 
 def _render_pdf(path):
