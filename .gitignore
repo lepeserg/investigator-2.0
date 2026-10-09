@@ -228,3 +228,8 @@
 !/docs/UPDATES.md
 
 !/tests/test_infra.py
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/tests.yml
