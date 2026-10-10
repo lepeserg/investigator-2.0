@@ -25,59 +25,30 @@ except Exception:
 from docx import Document
 from docx.oxml.ns import qn
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import BrokenSaveError, DocxLockedError, check_locked, save_atomic  # noqa: E402
+
 SYMBOL_FONTS = {"MT Extra", "Wingdings", "Wingdings 2", "Wingdings 3", "Symbol", "Webdings"}
 
 
 def _check_locked(path):
-    """Единая проверка «открыт в Word» — берём из docx_edit, чтобы сообщение было
-    одинаковым во всём навыке; если docx_edit недоступен, проверяем сами."""
-    if not os.path.exists(path):
-        return
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    """Единая проверка «открыт в Word / занят» (_common.check_locked) — сообщение одинаковое
+    во всём навыке; занятый файл завершает скрипт с этим сообщением."""
     try:
-        import docx_edit
-        docx_edit._check_locked(path)
-        return
-    except ImportError:
-        pass
-    d, name = os.path.split(path)
-    d = d or "."
-    for c in ("~$" + name, "~$" + name[2:] if len(name) >= 2 else "~$" + name):
-        if os.path.exists(os.path.join(d, c)):
-            sys.exit("Файл открыт в Word: %s. Закрой документ и повтори — правки НЕ внесены."
-                     % os.path.basename(path))
-    try:
-        with open(path, "r+b"):
-            pass
-    except PermissionError:
-        sys.exit("Файл открыт в Word (или занят): %s. Закрой документ и повтори — "
-                 "правки НЕ внесены." % os.path.basename(path))
+        check_locked(path)
+    except DocxLockedError as e:
+        sys.exit(str(e))
 
 
 def _save_atomic(doc, path):
-    """Сохранить через tmp в ТОЙ ЖЕ папке -> проверка zip -> os.replace.
-    Раньше python-docx писал прямо в оригинал: сбой посреди записи оставлял
-    обрезанный .docx (ревизия 22.08.2026)."""
-    import zipfile
-    d = os.path.dirname(os.path.abspath(path)) or "."
-    tmp = os.path.join(d, "~statcard_%d.docx" % os.getpid())
-    k = 0
-    while os.path.exists(tmp):
-        k += 1
-        tmp = os.path.join(d, "~statcard_%d_%d.docx" % (os.getpid(), k))
-    doc.save(tmp)
-    if not zipfile.is_zipfile(tmp):
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        sys.exit("python-docx сохранил битый файл — оригинал НЕ тронут.")
+    """Сохранить через tmp ~statcard_* в ТОЙ ЖЕ папке -> проверка zip -> os.replace
+    (_common.save_atomic: tmp удаляется при любом сбое). Раньше python-docx писал прямо в
+    оригинал: сбой посреди записи оставлял обрезанный .docx (ревизия 22.08.2026).
+    Битый zip или занятый файл завершают скрипт с сообщением — оригинал НЕ тронут."""
     try:
-        os.replace(tmp, path)
-    except PermissionError:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        sys.exit("Не удалось записать «%s» — вероятно, открыт в Word. "
-                 "Закрой документ и повтори — оригинал НЕ тронут." % os.path.basename(path))
-    return path
+        return save_atomic(doc, path, tmp_prefix="~statcard_")
+    except (BrokenSaveError, DocxLockedError) as e:
+        sys.exit(str(e))
 
 
 def _all_runs(doc):

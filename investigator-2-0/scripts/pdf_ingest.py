@@ -27,6 +27,7 @@ import sys
 import os
 import json
 import glob
+import importlib
 import subprocess
 
 
@@ -43,7 +44,8 @@ def _engine():
     if forced in ("fitz", "poppler"):
         return forced
     try:
-        import pymupdf as fitz  # noqa: F401
+        # проверка наличия PyMuPDF: модуль только импортируется, не используется
+        importlib.import_module("pymupdf")
         return "fitz"
     except Exception:
         return "poppler"
@@ -53,7 +55,7 @@ def _engine():
 def _pop_pagecount(path):
     try:
         r = subprocess.run(["pdfinfo", path], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", timeout=60)
         for line in r.stdout.splitlines():
             if line.lower().startswith("pages:"):
                 return int(line.split(":", 1)[1].strip())
@@ -66,14 +68,24 @@ def _pop_pagecount(path):
         return None
 
 
-def _pop_text(path, start=None, end=None):
+def _pop_text(path, start=None, end=None, fail_on_timeout=False):
+    """fail_on_timeout=True (подкоманда text): таймаут — ошибка с кодом 3, а не пустой
+    вывод с кодом 0. Для info (проба первых страниц) таймаут по-прежнему даёт ""."""
     cmd = ["pdftotext", "-layout"]
     if start:
         cmd += ["-f", str(start)]
     if end:
         cmd += ["-l", str(end)]
     cmd += [path, "-"]
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=600)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("pdftotext не ответил за 600 с — текст не извлечён. "
+                         "Задай диапазон страниц поменьше.\n")
+        if fail_on_timeout:
+            sys.exit(3)
+        return ""
     return r.stdout or ""
 
 
@@ -96,8 +108,13 @@ def _info_poppler(path):
 def _render_poppler(path, start, end, dpi, outdir):
     os.makedirs(outdir, exist_ok=True)
     root = os.path.join(outdir, "p")
-    subprocess.run(["pdftoppm", "-jpeg", "-r", str(dpi), "-f", str(start), "-l", str(end),
-                    path, root], check=True)
+    try:
+        subprocess.run(["pdftoppm", "-jpeg", "-r", str(dpi), "-f", str(start), "-l", str(end),
+                        path, root], check=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("pdftoppm не ответил за 30 мин — рендер прерван. "
+                         "Задай диапазон страниц поменьше или уменьши DPI.\n")
+        sys.exit(3)
     for f in sorted(glob.glob(root + "-*.jpg")):
         try:
             num = int(os.path.splitext(os.path.basename(f))[0].rsplit("-", 1)[-1])
@@ -108,7 +125,7 @@ def _render_poppler(path, start, end, dpi, outdir):
 
 
 def _text_poppler(path, start, end):
-    sys.stdout.write(_pop_text(path, start, end))
+    sys.stdout.write(_pop_text(path, start, end, fail_on_timeout=True))
 
 
 # ---------------------------------------------------------------- fitz (PyMuPDF)

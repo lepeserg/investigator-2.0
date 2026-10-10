@@ -5,6 +5,8 @@ Without an explicit view, tracked changes stop reading until the user chooses.
 Views are reading aids and do not establish an approved document version.
 """
 from collections import Counter
+import functools
+import html
 import re
 import zipfile
 from xml.etree import ElementTree as ET
@@ -17,6 +19,81 @@ CHANGES = {'ins': 'ВСТАВКА', 'del': 'УДАЛЕНИЕ',
 IGNORED = {'pPr', 'rPr', 'tblPr', 'tblGrid', 'trPr', 'tcPr', 'sectPr', 'instrText'}
 REVISION_TAGS = set(CHANGES) | {'pPrChange', 'rPrChange', 'tblPrChange',
                               'trPrChange', 'tcPrChange', 'sectPrChange'}
+
+
+# Быстрое извлечение текста из сырого WordprocessingML (регулярками, без разбора дерева) —
+# общее для check_tom, consistency_check, docx_integrity и style_lint. Единые правила:
+#   · текст берётся только из <w:t> (и <w:delText>, если include_deleted); <w:tab>, <w:tabs>,
+#     <w:t/> и прочие теги на «w:t» не цепляются; разметка рисунков и чисел вне w:t отбрасывается;
+#   · коды полей <w:instrText> не входят никогда;
+#   · <w:tab/> → tab ('\t'), табуляторы абзаца <w:tabs>…</w:tabs> — не текст;
+#   · </w:p> и пустой <w:p/> — конец абзаца ('\n' либо отдельный элемент списка);
+#   · сущности XML декодируются (html.unescape);
+#   · префикс берётся из объявления пространства имён WordprocessingML (xmlns:<префикс>=...):
+#     генераторы на ElementTree пишут «ns0:t» вместо «w:t». Нет объявления (кусок вроде
+#     одного <w:p>) — префикс «w». Чужие пространства (a:t рисунков и т.п.) не читаются.
+# Исправления Word здесь не выбираются: вставки читаются как текст, удалённое — по флагу.
+# Полноценное чтение с выбором редакции — read_docx.
+_OPEN = r"(?:\s[^>]*?)?(?<!/)>"
+_W_NS_RX = re.compile(r"""xmlns:([A-Za-z_][\w.-]*)\s*=\s*["'](?:"""
+                      r"http://schemas\.openxmlformats\.org/wordprocessingml/2006/main"
+                      r"|http://purl\.oclc\.org/ooxml/wordprocessingml/main)[\"']")
+DOCX_TEXT_PARTS = r"document|header\d*|footer\d*"
+
+
+@functools.lru_cache(maxsize=None)
+def _xml_text_rx(prefixes):
+    w = "(?:" + "|".join(re.escape(p) for p in prefixes) + "):"
+    return re.compile(
+        r"(?P<tabs><" + w + r"tabs" + _OPEN + r".*?</" + w + r"tabs>)"
+        r"|<(?P<pfx>" + w + r")(?P<kind>t|delText|instrText)" + _OPEN
+        + r"(?P<body>.*?)</(?P=pfx)(?P=kind)>"
+        r"|(?P<tab><" + w + r"tab(?:\s[^>]*)?/>)"
+        r"|</" + w + r"p>|<" + w + r"p(?:\s[^>]*)?/>", re.S)
+
+
+def xml_text(xml, *, include_deleted=False, paragraphs=False, tab="\t"):
+    """Текст куска WordprocessingML (document.xml, колонтитул, отдельный <w:p>).
+
+    paragraphs=False → строка, абзацы завершаются '\n';
+    paragraphs=True  → список текстов абзацев (хвост вне абзаца — только если непуст).
+    include_deleted=True — оставить удалённый при рецензировании текст (w:delText)."""
+    out, paras = [], []
+    prefixes = tuple(sorted(set(_W_NS_RX.findall(xml)))) or ("w",)
+    for m in _xml_text_rx(prefixes).finditer(xml):
+        kind = m.group("kind")
+        if kind:
+            if kind == "t" or (kind == "delText" and include_deleted):
+                out.append(html.unescape(m.group("body")))
+        elif m.group("tabs"):
+            continue
+        elif m.group("tab"):
+            out.append(tab)
+        elif paragraphs:
+            paras.append("".join(out))
+            out = []
+        else:
+            out.append("\n")
+    tail = "".join(out)
+    if not paragraphs:
+        return tail
+    if tail:
+        paras.append(tail)
+    return paras
+
+
+def docx_xml_text(path, parts=DOCX_TEXT_PARTS, *, sep="\n", errors="replace", **kwargs):
+    """xml_text частей word/<parts>.xml (порядок — как в архиве; parts — регулярка имени
+    без пути и расширения). Строки частей склеиваются sep, при paragraphs=True списки
+    абзацев сцепляются. errors — режим decode("utf-8", errors): consistency_check передаёт
+    "ignore" (как было у него), чтобы U+FFFD не разрывал ФИО. Пакет только читается."""
+    with zipfile.ZipFile(path) as archive:
+        texts = [xml_text(archive.read(name).decode("utf-8", errors), **kwargs)
+                 for name in archive.namelist()
+                 if re.fullmatch(r"word/(?:" + parts + r")\.xml", name)]
+    if kwargs.get("paragraphs"):
+        return [para for part in texts for para in part]
+    return sep.join(texts)
 
 
 class RevisionChoiceRequired(ValueError):

@@ -40,6 +40,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import find_tool  # noqa: E402
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -87,13 +90,7 @@ ANCHORS = [
 
 
 def find_tesseract():
-    if shutil.which("tesseract"):
-        return "tesseract"
-    for c in (r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-              r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
-        if os.path.isfile(c):
-            return c
-    return None
+    return find_tool("tesseract")
 
 
 def normalize(s):
@@ -150,12 +147,18 @@ def ocr_top(tess, doc, index, dpi, part, tmp):
     clip = fitz.Rect(r.x0, r.y0, r.x1, r.y0 + r.height * part)
     png = os.path.join(tmp, "p%05d.png" % (index + 1))
     page.get_pixmap(dpi=dpi, clip=clip).save(png)
-    res = subprocess.run([tess, png, "stdout", "-l", "rus", "--psm", "6"],
-                         capture_output=True)
     try:
-        os.remove(png)
-    except OSError:
-        pass
+        res = subprocess.run([tess, png, "stdout", "-l", "rus", "--psm", "6"],
+                             capture_output=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("tesseract не ответил за 120 с на странице %d — страница пропущена.\n"
+                         % (index + 1))
+        return []
+    finally:
+        try:
+            os.remove(png)
+        except OSError:
+            pass
     out = []
     for ln in res.stdout.decode("utf-8", "replace").splitlines():
         ln = " ".join(ln.split())

@@ -1,8 +1,11 @@
 # Entry point for Windows PowerShell 5.1; Python is not needed to start.
 [CmdletBinding()]
 param(
+    # Not named $Profile: that would shadow the automatic $PROFILE variable.
+    # The alias keeps the documented `-Profile <name>` invocation working.
+    [Alias('Profile')]
     [ValidateSet('menu', 'base', 'documents', 'ocr', 'audio', 'all')]
-    [string]$Profile = 'menu',
+    [string]$SetupProfile = 'menu',
     [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -37,7 +40,7 @@ function Find-Python312 {
 
 try {
     if ($env:OS -ne 'Windows_NT') { throw 'Windows is required.' }
-    if ($Profile -eq 'menu') {
+    if ($SetupProfile -eq 'menu') {
         Write-Host 'Investigator 2.0 - select components'
         Write-Host '1. Base (Python + document libraries)'
         Write-Host '2. Documents (base + LibreOffice if Word is absent)'
@@ -49,7 +52,7 @@ try {
         if ($choice -eq '0') { exit 0 }
         $choices = @{ '1'='base'; '2'='documents'; '3'='ocr'; '4'='audio'; '5'='all' }
         if (-not $choices.ContainsKey($choice)) { throw 'Invalid selection.' }
-        $Profile = $choices[$choice]
+        $SetupProfile = $choices[$choice]
     }
     $taskPython = Find-Python312
     if (-not $taskPython) {
@@ -66,7 +69,7 @@ try {
     }
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
-    $taskArgs = @((Join-Path $PSScriptRoot 'setup_windows.py'), '--profile', $Profile)
+    $taskArgs = @((Join-Path $PSScriptRoot 'setup_windows.py'), '--profile', $SetupProfile)
     if ($CheckOnly) { $taskArgs += '--check' }
     & $taskPython @taskArgs
     exit $LASTEXITCODE
