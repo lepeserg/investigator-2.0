@@ -18,6 +18,7 @@ import word_text
 import extract_docx
 import ocr_smart
 import make_docx
+import pdf_ingest
 
 NS='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 def paragraph(text):return '<w:p><w:r><w:t>'+text+'</w:t></w:r></w:p>'
@@ -113,10 +114,38 @@ class RefactorTests(unittest.TestCase):
             with self.assertRaises(ValueError):ocr_smart.run_tesseract('tess','image.png',0,1)
             engine.assert_not_called()
 
+    def run_ocr_main(self,argv,marker=None):
+        stdout=io.StringIO();stderr=io.StringIO()
+        with mock.patch.object(sys,'argv',['ocr_smart.py']+argv),mock.patch.object(ocr_smart,'find_marker',return_value=marker),mock.patch.object(ocr_smart,'find_tesseract',return_value='tess'),mock.patch.object(ocr_smart.subprocess,'run') as engine,contextlib.redirect_stdout(stdout),contextlib.redirect_stderr(stderr):
+            result=ocr_smart.main()
+        return result,stdout.getvalue(),stderr.getvalue(),engine
+
+    def test_image_page_range_rejected_before_any_engine(self):
+        image=self.folder/'scan.png';image.write_bytes(b'synthetic')
+        for marker in (None,'marker_single'):
+            with self.subTest(marker=marker):
+                result,out,err,engine=self.run_ocr_main([str(image),'2','3'],marker)
+                self.assertEqual(result,2);self.assertIn('только страница 1',err)
+                engine.assert_not_called();self.assertNotIn('[OCR:',out)
+
+    def test_missing_pymupdf_gives_clear_error_not_traceback(self):
+        pdf=self.folder/'scan.pdf';pdf.write_bytes(b'%PDF-1.4 synthetic')
+        with mock.patch.dict(sys.modules,{'pymupdf':None}):
+            result,out,err,engine=self.run_ocr_main([str(pdf),'3'])
+        self.assertEqual(result,1);self.assertIn('PyMuPDF',err);self.assertNotIn('Traceback',err)
+        engine.assert_not_called()
+
+    def test_pdftotext_timeout_fails_text_command(self):
+        timeout=subprocess.TimeoutExpired(['pdftotext'],600)
+        with mock.patch.object(pdf_ingest.subprocess,'run',side_effect=timeout),contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(pdf_ingest._pop_text('x.pdf',1,5),'')  # info: проба без падения
+            with self.assertRaises(SystemExit) as stop:pdf_ingest._text_poppler('x.pdf',1,None)
+        self.assertNotEqual(stop.exception.code,0)
+
     def test_pymupdf_supported_import_has_no_deprecation_warning(self):
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter('always')
-            with self.assertRaises(ValueError):ocr_smart.run_tesseract('tess','image.png',0,1)
+            ocr_smart._import_pymupdf()
             gc.collect()
         self.assertFalse([w for w in captured if 'deprecated' in str(w.message).lower()])
 
@@ -154,5 +183,21 @@ class RefactorTests(unittest.TestCase):
         blank=self.letterhead();out=self.folder/'rejected.docx'
         with self.assertRaises(ValueError):make_docx.build_letterhead_doc(str(out),[{'type':'para','text':'Учебный текст.'}],blank_template_path=str(blank),letterhead_profile='vsu-cvo-requests')
         self.assertFalse(out.exists())
+
+    def test_check_skill_flags_taskkill_by_image_name(self):
+        import check_skill
+        root=self.folder/'skill';(root/'references').mkdir(parents=True);(root/'scripts').mkdir()
+        def flagged(code):
+            (root/'scripts'/'synthetic.py').write_text('"""Синтетический скрипт."""\nimport os, subprocess\n'+code+'\n',encoding='utf-8')
+            problems=check_skill.check(str(root))[0]
+            return [p for p in problems if 'synthetic.py' in p and 'taskkill' in p]
+        for code in ['os.system("taskkill /F /IM X.EXE")',
+                     'os.system("TASKKILL /f /im excel.exe /T >nul 2>&1")',
+                     'subprocess.run(["taskkill", "/F", "/IM", "X.EXE"])',
+                     'subprocess.run([\n    "taskkill",\n    "/F",\n    "/im",\n    "WINWORD.EXE"])']:
+            with self.subTest(code=code):self.assertTrue(flagged(code))
+        for code in ['os.system("taskkill /F /PID 123")',
+                     'subprocess.run(["taskkill", "/F", "/PID", str(123)])']:
+            with self.subTest(code=code):self.assertFalse(flagged(code))
 
 if __name__=='__main__':unittest.main()

@@ -42,6 +42,8 @@ import re
 import sys
 import zipfile
 
+from word_text import xml_text
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -104,13 +106,13 @@ def _docx_paragraphs(path):
         pass
     with zipfile.ZipFile(path) as z:
         xml = z.read("word/document.xml").decode("utf-8", "replace")
-    out = []
-    for para in re.findall(r"<w:p[ >].*?</w:p>", xml, re.S):
-        txt = "".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", para, re.S))
-        txt = (txt.replace("&amp;", "&").replace("&lt;", "<")
-                  .replace("&gt;", ">").replace("&quot;", '"').replace("&#39;", "'"))
-        out.append(txt)
-    return out
+    return _xml_paragraphs(xml)
+
+
+def _xml_paragraphs(xml):
+    """Тексты абзацев из document.xml — общими правилами word_text.xml_text
+    (удалённое при рецензировании и коды полей не входят; <w:tab/> здесь не пишется)."""
+    return xml_text(xml, paragraphs=True, tab="")
 
 
 def parse_perechen(path):
@@ -368,7 +370,9 @@ def page_rotations(path):
         rots = [doc[i].rotation for i in range(doc.page_count)]
         doc.close()
         return rots
-    except Exception:
+    except Exception as e:
+        print("⚠ повороты страниц не прочитаны, сверка поворотов пропущена: %s (%s)" % (path, e),
+              file=sys.stderr)
         return None
 
 
@@ -535,7 +539,7 @@ def cmd_map(specs, positions, numbering, out):
             out.append("  · ничего не нашлось: проверьте номер тома и диапазон")
             problems.append(("карта", "по «%s» в описи ничего нет" % spec))
             continue
-        cur = None
+        cur = prev = None
         for t, s in rows:
             if cur is None or s["pos"] != cur[1]["pos"] or t != cur[0]:
                 if cur:

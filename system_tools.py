@@ -27,11 +27,18 @@ def search_paths():
     return list(dict.fromkeys(p for p in paths if p.is_dir()))
 
 
+def prepend_path(paths, current):
+    """Склеить PATH только из непустых частей: пустой элемент на POSIX = текущая папка."""
+    parts = [str(p) for p in paths]
+    parts.append(current or '')
+    return os.pathsep.join(p for p in parts if p)
+
+
 def environment(config, root):
     env = dict(os.environ)
     paths = [Path(p) for p in config['tools']['extra_path']]
     paths.extend(search_paths() if os.name == 'nt' else [])
-    env['PATH'] = os.pathsep.join(str(p) for p in paths if p.is_dir()) + os.pathsep + env.get('PATH', '')
+    env['PATH'] = prepend_path((p for p in paths if p.is_dir()), env.get('PATH', ''))
     if config['tools']['tessdata_prefix']:
         env['TESSDATA_PREFIX'] = config['tools']['tessdata_prefix']
     elif not env.get('TESSDATA_PREFIX'):

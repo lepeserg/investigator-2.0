@@ -78,6 +78,14 @@ from make_docx import (  # noqa: E402
     replace_block_between_anchors, set_cell_text, _set_run_font,
     FIRST_LINE_INDENT, BODY_ALIGN, prune_backups,
 )
+# Занятость файла и атомарное сохранение — общие для навыка (_common). Старые имена
+# DocxLockedError / word_lock_path / _check_locked / _save_atomic остаются в docx_edit:
+# их импортируют снаружи (DocxLockedError) и тесты (_save_atomic).
+import _common  # noqa: E402
+from _common import (  # noqa: E402
+    DocxLockedError, check_locked as _check_locked, save_atomic as _common_save_atomic,
+)
+word_lock_path = _common.word_lock_path  # публичное имя (references/25-assembly.md)
 
 
 def _copy_run_font(dst_run, src_run):
@@ -146,74 +154,7 @@ def set_statcard_cell(cell, value, font_from_cell=None):
     return cell
 
 
-class DocxLockedError(IOError):
-    """Файл занят (обычно открыт в Word). Закрыть документ и повторить."""
-
-
 _WS = re.compile(r"\s+")
-
-
-# ---------- обнаружение блокировки Word (lock-файл ~$ + проба r+b) ----------
-
-def word_lock_path(path):
-    """Путь к lock-файлу Word (~$...) если документ открыт, иначе None.
-    Word роняет первые 2 символа имени при len>=2, поэтому проверяем оба варианта
-    и, как запас, ищем '~$*' того же расширения с совпадающим хвостом имени."""
-    d, name = os.path.split(path)
-    d = d or "."
-    base, ext = os.path.splitext(name)
-    cands = ["~$" + name]
-    if len(name) >= 2:
-        cands.append("~$" + name[2:])
-    for c in cands:
-        if os.path.exists(os.path.join(d, c)):
-            return os.path.join(d, c)
-    # ⛔ ЭВРИСТИЧЕСКИЙ ФОЛБЭК УДАЛЁН (боевой отчёт 05.08.2026). Он искал ЛЮБОЙ «~$*.docx»,
-    # в имени которого встречаются 4 символа из имени целевого файла, — и объявлял занятым
-    # документ, который никто не открывал (совпало имя старой редакции в той же папке).
-    # Ложная блокировка хуже пропуска: правило 24 начинает останавливать работу вхолостую,
-    # а обходить его вручную опасно. Проверяем ТОЛЬКО два точных варианта имени, которые
-    # Word действительно создаёт; остальное ловит попытка открыть файл на запись (_check_locked).
-    return None
-
-
-def _busy_message(path, exc=None, *, stage="записать"):
-    """Текст отказа по занятому файлу — РАЗЛИЧАЯ Word и любой другой держатель дескриптора.
-
-    ⛔ Провал 07.09.2026 (управляемый опыт координатора). При ЛЮБОМ занятом дескрипторе модуль
-    говорил «вероятно, открыт в Word. Закрой документ» — а Word файла не открывал ни разу:
-    дескриптор держал другой процесс (незакрытый `zipfile` в моём же скрипте). Сообщение
-    отправляло закрывать Word, когда причина другая, и отказ диагностировали вслепую.
-    Признак Word — ЕГО СОБСТВЕННЫЙ lock-файл `~$<имя>` рядом; нет его — не утверждать про Word."""
-    name = os.path.basename(path)
-    lp = word_lock_path(path)
-    code = ""
-    if exc is not None:
-        wn, se = getattr(exc, "winerror", None), getattr(exc, "strerror", None)
-        parts = [p for p in (("WinError %s" % wn) if wn else None, se) if p]
-        if parts:
-            code = " [" + "; ".join(parts) + "]"
-    if lp:
-        return ("Не удалось %s «%s»%s — документ ОТКРЫТ В WORD (рядом его lock-файл «%s»). "
-                "Закрой документ и повтори — правки НЕ внесены."
-                % (stage, name, code, os.path.basename(lp)))
-    return ("Не удалось %s «%s»%s — файл занят ДРУГИМ ПРОЦЕССОМ. Lock-файла Word «~$…» рядом НЕТ, "
-            "поэтому закрывать Word, скорее всего, бесполезно: ищи незакрытый дескриптор у себя "
-            "(zipfile/open без close, антивирус, индексатор, открытый предпросмотр). "
-            "Правки НЕ внесены." % (stage, name, code))
-
-
-def _check_locked(path):
-    """Двойная проверка занятости: lock-файл ~$ и попытка открыть на запись."""
-    if not os.path.exists(path):
-        return
-    if word_lock_path(path):
-        raise DocxLockedError(_busy_message(path, stage="править"))
-    try:
-        with open(path, "r+b"):
-            pass
-    except PermissionError as e:
-        raise DocxLockedError(_busy_message(path, e, stage="открыть на запись"))
 
 
 # ---------- открытие / сохранение ----------
@@ -223,19 +164,15 @@ def open_doc(path):
 
 
 def _save_atomic(doc, path, *, backup=True):
-    """Атомарно сохранить в тот же файл: tmp в ТОЙ ЖЕ папке -> проверка zip -> os.replace.
+    """Атомарно сохранить в тот же файл: tmp ~edit_* в ТОЙ ЖЕ папке -> проверка zip ->
+    метаданные + бэкап -> os.replace (_common.save_atomic; tmp удаляется при любом сбое).
     backup=True: копия исходника в <path>.bak_<timestamp> перед заменой (+ prune_backups)."""
-    d = os.path.dirname(os.path.abspath(path))
-    tmp = os.path.join(d, "~edit_%d_0.docx" % os.getpid())
-    _k = 0
-    while os.path.exists(tmp):  # уникальность при конкурентных правках в одном процессе
-        _k += 1
-        tmp = os.path.join(d, "~edit_%d_%d.docx" % (os.getpid(), _k))
-    doc.save(tmp)
-    if not zipfile.is_zipfile(tmp):
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise IOError("python-docx сохранил битый файл")
+    return _common_save_atomic(doc, path, tmp_prefix="~edit_",
+                               before_replace=lambda tmp: _finish_save(tmp, path, backup))
+
+
+def _finish_save(tmp, path, backup):
+    """Метаданные -> бэкап. Замену tmp->path и очистку tmp делает _common.save_atomic."""
     # Свойства документа → профиль владельца (автор = следователь; никаких следов
     # python-docx и чужих авторов донора — стоячее указание владельца 07.08.2026,
     # см. doc_meta.py). Идемпотентно: на чистом файле no-op.
@@ -252,13 +189,6 @@ def _save_atomic(doc, path, *, backup=True):
             bak = "%s.bak_%s_%d" % (path, stamp, i); i += 1
         shutil.copyfile(path, bak)
         prune_backups(path)  # ретенция: не плодить .bak_* без ограничения
-    try:
-        os.replace(tmp, path)
-    except PermissionError as e:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise DocxLockedError(_busy_message(path, e, stage="записать")) from e
-    return path
 
 
 # ---------- обход абзацев ----------
@@ -295,7 +225,9 @@ def _textbox_paragraphs(container):
         return
     try:
         boxes = el.findall(".//" + qn("w:txbxContent"))
-    except Exception:
+    except Exception as e:
+        print("⚠ надписи (w:txbxContent) не прочитаны — дата/исх. № в рамках НЕ обработаны: %s" % e,
+              file=sys.stderr)
         return
     for box in boxes:
         for p_el in box.findall(qn("w:p")):
@@ -317,7 +249,9 @@ def _hdrftr_exists(part):
     `is_linked_to_previous` читает ссылку в sectPr и ничего не создаёт — проверяем ТОЛЬКО им."""
     try:
         return not part.is_linked_to_previous
-    except Exception:
+    except Exception as e:
+        print("⚠ колонтитул не прочитан и пропущен (его текст НЕ обработан): %s" % e,
+              file=sys.stderr)
         return False
 
 

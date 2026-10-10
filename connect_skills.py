@@ -1,7 +1,6 @@
 """Create project-local Codex entrypoints without copying private data or global skills."""
 from pathlib import Path
 import argparse
-import json
 
 ROOT = Path(__file__).resolve().parent
 NAMES = ['investigator-2-0'] + ['investigator-2-0-' + suffix for suffix in

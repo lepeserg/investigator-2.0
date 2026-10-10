@@ -28,6 +28,7 @@ import os
 import re
 import sys
 from word_text import read_docx, VIEWS, RevisionChoiceRequired
+from _common import find_tool
 
 try:  # иначе кириллица в выводе ломается на Windows-консоли (cp866/cp1251)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -56,9 +57,10 @@ def extract_text(path, revisions=None):
             # иначе — грубое извлечение читаемого текста в cp1251
             try:
                 import subprocess
-                r = subprocess.run(["antiword", "-w", "0", "-m", "UTF-8.txt", path],
-                                   capture_output=True, timeout=60)
-                if r.returncode == 0 and r.stdout:
+                antiword = find_tool("antiword")
+                r = subprocess.run([antiword, "-w", "0", "-m", "UTF-8.txt", path],
+                                   capture_output=True, timeout=60) if antiword else None
+                if r is not None and r.returncode == 0 and r.stdout:
                     return r.stdout.decode("utf-8", "replace")
             except Exception:
                 pass
@@ -68,7 +70,8 @@ def extract_text(path, revisions=None):
             return open(path, encoding="utf-8", errors="ignore").read()
     except RevisionChoiceRequired:
         raise
-    except Exception:
+    except Exception as e:
+        print(f"⚠ не прочитан, в поиск не вошёл: {path} ({e})", file=sys.stderr)
         return None
     return None
 
@@ -179,7 +182,7 @@ def main():
         if scanned < MIN_CORPUS_FILES:
             print(f"⛔ ВЫВОД О КОРПУСЕ НЕ ДЕЛАЕТСЯ: обойдено всего {scanned} файл(ов) — это не корпус.")
             print(f"   Похоже, --root указывает не туда (сейчас: {os.path.abspath(a.root)}).")
-            print(f"   Повторить с корнем корпуса, например:")
+            print("   Повторить с корнем корпуса, например:")
             print(f'     python corpus_search.py "{a.query[0]}" --root "{DEFAULT_ROOT}"')
             print("   ⛔ Пометку «подлежит установлению» по такому прогону НЕ ставить (правило 30).")
             sys.exit(2)

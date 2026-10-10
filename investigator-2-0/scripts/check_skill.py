@@ -9,7 +9,8 @@
   1. YAML-frontmatter `SKILL.md` парсится, есть `name` и `description` (инвариант: кавычки при «: »).
   2. Все файлы `references/*.md`, упомянутые в тексте, существуют; все существующие — упомянуты.
   3. Все `scripts/*.py`, упомянутые в тексте, существуют; все существующие — упомянуты.
-  4. Ссылки на разделы вида «§07.05.8», «§06.01.13», «§16.21» разрешаются в реальные заголовки.
+  4. Ссылки на разделы вида «§07.05.8», «§06.01.13», «§16.21» разрешаются в реальные заголовки
+     (и словом: «раздел 2.13», «разделы 08.22»).
   5. Нет ДУБЛЕЙ номеров разделов внутри одного файла.
   6. Ссылки на «правило N» не выходят за фактическое число критических правил в `SKILL.md`.
   7. Нет управляющих символов (следы битой генерации) и BOM — в md И в скриптах.
@@ -26,11 +27,16 @@
  15. Строки "text" в ```python-шаблонах references (то, что генератор кладёт В ДОКУМЕНТ) не несут
      длинного тире вне плейсхолдера {…} и сдвоенного «ст. ст.» — иначе линтер ловит это уже в каждом
      документе заново (09.09.2026: 27 тире в шаблонах семи жанров, донорский хвост с «ст. ст.» в шести).
+ 16. Нет ПУСТЫХ разделов: за заголовком сразу идёт заголовок того же или более высокого уровня
+     (заголовки внутри блоков кода не считаются). Пустой «Фатальные ошибки» читается как «ошибок нет».
+ 17. Ссылки «Шаг N» указывают на шаги, объявленные в основном `SKILL.md` (архивный
+     `legacy-dispatcher.md` и собственная нумерация шагов внутри файла не в счёт).
 
 Запуск:
     python check_skill.py [<корень навыка>]        # по умолчанию — папка на уровень выше scripts/
 Код возврата: 0 — чисто; 1 — есть замечания.
 """
+import glob
 import os
 import re
 import sys
@@ -118,6 +124,10 @@ _SEC = r"\d{1,2}\.\d{2}[А-ЯA-Z]?(?:\.\d+[А-ЯA-Z]?)*"
 # объявление подпункта: номер в начале строки (## / ** / - / § ), дальше точка или скобка
 SUBSEC_DECL = re.compile(r"^[\s#*\-–—>]*§?\s?(\d{2}\.\d{2}\.\d{1,2})\s*[.)]", re.M)
 SEC_REF = re.compile(r"§\s?(" + _SEC + r")")
+# Ссылка словом: «(раздел 2.13)», «разделы 08.22». Знак § не обязателен — такая ссылка на удалённый
+# §2.13 из 06a гейт пропускал молча. Номера с однозначной второй частью («раздел 17.4», «раздел 3.2»
+# карточки) _SEC не берёт — как и у ссылок через §.
+RAZDEL_REF = re.compile(r"[Рр]аздел[а-яё]*\s+§?\s?(" + _SEC + r")(?![\d.]*\d)")
 # В заголовке может стоять диапазон («### 16.03.6–16.03.7. …») — забираем ВСЕ номера строки
 SEC_HEAD_LINE = re.compile(r"^#{1,4}\s+((?:" + _SEC + r")(?:\s*[–—-]\s*" + _SEC + r")*)\.", re.M)
 SEC_IN_HEAD = re.compile(_SEC)
@@ -171,8 +181,6 @@ PASSPORT_WANTED = set()
 # ⛔ НЕ включать сюда файлы-КРОСС-ССЫЛКИ без собственного тела: `05b-prodlenie-proverki-krsp.md` —
 # указатель на §23.03–23.05, у него нет ни маршрута, ни состава комплекта, ни своих ошибок.
 # Паспорт там был бы церемонией: пять пустых блоков вместо одной строки «см. 23».
-# Файлы-ИНДЕКСЫ (`06-genres-investigative.md`, `07-genres-charging.md`,
-# `08-genres-correspondence.md`) — по той же причине.
 # Номер раздела бывает и вида `08e.1` (буква после первой пары цифр) — иначе проверка
 # «паспорт стоит первым» молча не работала бы на `08e-raport.md`.
 FIRST_SECTION = re.compile(r"^## \d{2}[A-Za-zА-Яа-я]?\.\d", re.M)
@@ -193,10 +201,23 @@ CARDS_REQUIRED = PASSPORT_REQUIRED - {"18-bank-analysis.md"}
 SECTION_SPLIT = re.compile(r"(?m)^## (\d{2}[A-Za-zА-Яа-я]?\.[\d.]*\d)\.")
 
 
+def _card_files(refs_dir):
+    """Файлы с разделами-жанрами: сам файл из CARDS_REQUIRED и его части `<имя>-*.md`.
+
+    Крупные справочники разрезаны: паспорт и карта остаются в исходном файле, разделы
+    уезжают в части. Без частей проверка карточек молча перестала бы работать."""
+    names = set()
+    for name in CARDS_REQUIRED:
+        names.add(name)
+        stem = name[:-3]
+        names.update(os.path.basename(p) for p in glob.glob(os.path.join(refs_dir, stem + "-*.md")))
+    return sorted(names)
+
+
 def _check_cards(refs_dir):
     """У каждого раздела-жанра есть карточка из четырёх полей либо пометка «не жанр»."""
     problems = []
-    for name in sorted(CARDS_REQUIRED):
+    for name in _card_files(refs_dir):
         path = os.path.join(refs_dir, name)
         if not os.path.isfile(path):
             continue
@@ -223,7 +244,7 @@ def _check_cards(refs_dir):
 
 
 def _check_passports(refs_dir):
-    """Паспорт жанра: есть · стоит ПЕРВЫМ · полон (пять блоков) · несёт запрет Шага 3."""
+    """Паспорт жанра: есть · стоит ПЕРВЫМ · полон (пять блоков) · требует полного чтения паспорта."""
     problems, notes = [], []
     if not os.path.isdir(refs_dir):
         return problems, notes
@@ -236,7 +257,7 @@ def _check_passports(refs_dir):
         required = name in PASSPORT_REQUIRED
         pos = t.find(PASSPORT_HEAD)
         if pos < 0:
-            msg = f"references/{name}: нет ПАСПОРТА ЖАНРА (Шаг 3 — голова файла из пяти блоков)"
+            msg = f"references/{name}: нет ПАСПОРТА ЖАНРА (голова файла из пяти блоков)"
             (problems if required else notes).append(msg)
             continue
         # паспорт обязан стоять ДО тела: иначе он не голова, а очередной раздел в середине
@@ -251,9 +272,10 @@ def _check_passports(refs_dir):
         if missing:
             msg = (f"references/{name}: в паспорте нет блоков — " + " · ".join(missing))
             (problems if required else notes).append(msg)
-        if "Шаг 3" not in body:
-            notes.append(f"references/{name}: в паспорте нет ссылки на Шаг 3 "
-                         f"(«читается ПОЛНОСТЬЮ и ДО первого действия»)")
+        # Прежний «Шаг 3» остался только в архивном диспетчере; в паспорте требуем само правило.
+        if "читается ПОЛНОСТЬЮ и ДО первого действия" not in body:
+            notes.append(f"references/{name}: в паспорте нет правила "
+                         f"«паспорт читается ПОЛНОСТЬЮ и ДО первого действия»")
     return problems, notes
 
 
@@ -287,6 +309,70 @@ def _strip_docs(src):
             for i in range(a, min(b, len(out[r]))):
                 out[r][i] = " "
     return "\n".join("".join(l) for l in out)
+
+
+# ── ПУСТЫЕ РАЗДЕЛЫ ────────────────────────────────────────────────────────────────────────
+# Повод (ревизия 09.10.2026): после обезличивания в девяти паспортах остался заголовок
+# «### 3. ФАТАЛЬНЫЕ ОШИБКИ ЖАНРА» без текста, а в 24-rules.md — пустая «Карта правил».
+# Модель читает пустой блок как «фатальных ошибок нет» — это хуже, чем отсутствие блока.
+# Архив (legacy-dispatcher.md) не правится и не проверяется.
+MD_HEADING = re.compile(r"^(#{1,6})\s+\S")
+MD_FENCE = re.compile(r"^\s*(```|~~~)")
+MD_HRULE = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
+ARCHIVE_MD = {"legacy-dispatcher.md"}
+
+
+def _empty_sections(text):
+    """[(номер строки, заголовок)] разделов без текста и подзаголовков до следующего заголовка
+    того же или более высокого уровня. Код в ```-блоке — содержимое, а не заголовки;
+    горизонтальная черта `---` содержимым не считается."""
+    heads, content, fence = [], set(), False
+    for i, line in enumerate(text.split("\n")):
+        if MD_FENCE.match(line):
+            fence = not fence
+            content.add(i)
+            continue
+        if fence:
+            content.add(i)
+            continue
+        m = MD_HEADING.match(line)
+        if m:
+            heads.append((i, len(m.group(1)), line.strip()))
+        elif line.strip() and not MD_HRULE.match(line):
+            content.add(i)
+    empty = []
+    for k, (i, level, line) in enumerate(heads):
+        end = next((j for j, lv, _ in heads[k + 1:] if lv <= level), None)
+        end = float("inf") if end is None else end
+        if any(i < c < end for c in content) or any(i < j < end for j, _, _ in heads[k + 1:]):
+            continue
+        empty.append((i + 1, line))
+    return empty
+
+
+# ── ССЫЛКИ НА ШАГИ ОСНОВНОГО SKILL.md ─────────────────────────────────────────────────────
+# Повод (ревизия 09.10.2026): после сжатия SKILL.md в нём остались шаги 6, 9 и 10, а 18 паспортов
+# по-прежнему отсылали к «Шагу 3», правила — к «Шагу 9.0-bis» и «Шагу 8». Эти шаги живут только
+# в архивном диспетчере, который целиком не загружается, — ссылка вела в пустоту.
+# Ссылкой на шаг навыка считается «Шаг N» с заглавной буквы (шаг, Шага, Шаге, Шагу, Шагом).
+# Если файл сам объявляет «Шаг N» в начале строки (свой алгоритм: части 11-workflows, 14-plenums,
+# сценарий Г в 25-assembly), ссылки на этот номер в нём — локальные и не проверяются.
+_STEP_NUM = r"(\d+(?:\.\d+)?(?:-[a-z]+)?)"
+SKILL_STEP_DECL = re.compile(r"^#{1,6}\s+(?:⛔\s*)?Шаг\s+" + _STEP_NUM, re.M)
+LOCAL_STEP_DECL = re.compile(r"^[\s#*>⛔]*Шаг\s+" + _STEP_NUM, re.M)
+STEP_REF = re.compile(r"Шаг(?:а|е|у|ом)?\s+" + _STEP_NUM)
+
+
+def _strip_fences(text):
+    """Заменить строки внутри ```-блоков пустыми, сохранив нумерацию строк."""
+    out, fence = [], False
+    for line in text.split("\n"):
+        if MD_FENCE.match(line):
+            fence = not fence
+            out.append("")
+            continue
+        out.append("" if fence else line)
+    return "\n".join(out)
 
 
 def _read(p):
@@ -387,7 +473,7 @@ def check(root):
             if n > 1:
                 problems.append(f"{os.path.basename(path)}: номер раздела §{num} встречается {n} раз(а)")
 
-    refd = {_norm_sec(x) for x in SEC_REF.findall(all_text)}
+    refd = {_norm_sec(x) for x in SEC_REF.findall(all_text) + RAZDEL_REF.findall(all_text)}
     unresolved = sorted(n for n in refd if n not in heads)
     # §NN.NN.N может ссылаться на подпункт внутри раздела §NN.NN — считаем разрешённой,
     # если существует любой заголовок-префикс
@@ -409,10 +495,12 @@ def check(root):
         problems.append(f"ссылка на подпункт §{n}: раздел §{n.rsplit('.', 1)[0]} есть, "
                         f"а самого подпункта {n} нигде не объявлено")
 
-    # 6. После разделения на навыки полный реестр правил находится в 24-rules.md.
-    # Проверяем существование каждого номера, а не только верхнюю границу.
+    # 6. После разделения на навыки полный реестр правил находится в 24-rules.md и его
+    # частях 24-rules-*.md. Проверяем существование каждого номера, а не только верхнюю границу.
     rules_path = os.path.join(refs_dir, "24-rules.md")
-    rules_text = md_files.get(rules_path, txt)
+    rules_parts = [v for k, v in sorted(md_files.items())
+                   if os.path.dirname(k) == refs_dir and os.path.basename(k).startswith("24-rules-")]
+    rules_text = "\n".join([md_files.get(rules_path, txt)] + rules_parts)
     rules = {int(r) for r in re.findall(r"^(\d{1,2})\.\s+", rules_text, re.M)}
     for r in sorted({int(x) for x in RULE_REF.findall(all_text)}):
         if r not in rules:
@@ -503,8 +591,15 @@ def check(root):
     DANGER = [
         (r'Dispatch\(\s*["\'](?:Word|Excel|PowerPoint)\.Application',
          'Dispatch подключается к РАБОЧЕМУ Office пользователя — только DispatchEx (свой процесс)'),
-        (r'taskkill[^\n]*["\']/IM["\']',
-         'taskkill /IM убьёт и рабочий Office владельца — снимать только свои PID и только окна без заголовка'),
+        # taskkill по ИМЕНИ образа — в любом регистре и в любой форме: строка для os.system /
+        # subprocess («taskkill /F /IM EXCEL.EXE») и список аргументов (["taskkill", "/F", "/IM", …]),
+        # в т.ч. разнесённый по строкам. Окно поиска — до закрывающей скобки вызова.
+        # Повод: дважды (сначала Word, затем Excel — post_release_gvp.py) `taskkill /F /IM` снёс
+        # ВСЕ экземпляры владельца вместе с несохранёнными документами. Снимать только СВОЙ PID.
+        (r'(?i)\btaskkill\b[^)\]]{0,300}?(?<![\w/-])[/-]IM\b',
+         'снятие процесса по имени образа (ключ /IM у taskkill) убьёт ВСЕ экземпляры программы '
+         'владельца с несохранёнными документами '
+         '(дважды: Word, затем Excel) — снимать только СВОЙ PID (taskkill /PID <свой>)'),
     ]
     for f in py_files:
         src = _read(os.path.join(scr_dir, f))
@@ -616,6 +711,33 @@ def check(root):
         if not any(h == r or h.startswith(r + ".") for h in odd_heads):
             problems.append(f"ссылка на несуществующий раздел: §{r} (форма с буквой — "
                             f"проверка 4 её не видит)")
+
+    # 16. ПУСТЫЕ РАЗДЕЛЫ (см. комментарий у _empty_sections)
+    for path, t in md_files.items():
+        name = os.path.basename(path)
+        if name in ARCHIVE_MD:
+            continue
+        for ln, head in _empty_sections(t):
+            problems.append(f"{name}:{ln}: пустой раздел «{head}» — за заголовком сразу идёт "
+                            f"заголовок того же или более высокого уровня; дай содержание или "
+                            f"отсылку к месту, где оно есть, либо убери заголовок")
+
+    # 17. ССЫЛКИ «Шаг N» НА НЕСУЩЕСТВУЮЩИЙ ШАГ ОСНОВНОГО SKILL.md (см. комментарий у STEP_REF)
+    skill_steps = set(SKILL_STEP_DECL.findall(txt))
+    for path, t in md_files.items():
+        name = os.path.basename(path)
+        if name in ARCHIVE_MD or name.lower() == "changelog.md":
+            continue
+        body = _strip_fences(t)
+        local = set(LOCAL_STEP_DECL.findall(body)) if path != skill_md else set()
+        for ln, line in enumerate(body.split("\n"), 1):
+            for num in STEP_REF.findall(line):
+                if num in skill_steps or num in local:
+                    continue
+                have = ", ".join(sorted(skill_steps, key=lambda s: [int(x) for x in re.findall(r"\d+", s)])) or "нет"
+                problems.append(f"{name}:{ln}: ссылка на «Шаг {num}», которого нет в основном SKILL.md "
+                                f"(шаги там: {have}); прежняя нумерация — только в архиве "
+                                f"legacy-dispatcher.md, сошлись на действующий раздел")
 
     # 14. ФАЙЛЫ, КОТОРЫЕ РАНЬШЕ НЕ ПРОВЕРЯЛИСЬ ВООБЩЕ (ревизия 22.08.2026):
     #     константы.json, адресаты.json, scripts/requirements.txt, шаблон бланка.

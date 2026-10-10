@@ -42,6 +42,7 @@
 «N файлов, M страниц». Код возврата: 0 — таких PDF нет; 1 — есть (годится как гейт);
 2 — ошибка запуска (нет корня, нет PyMuPDF, нет ocrmypdf)."""
 import argparse
+import importlib
 import io
 import os
 import subprocess
@@ -184,7 +185,8 @@ def main():
         print("Нет такой папки: %s" % args.root)
         return 2
     try:
-        import pymupdf as fitz  # noqa: F401
+        # проверка наличия PyMuPDF: модуль только импортируется, не используется
+        importlib.import_module("pymupdf")
     except ImportError:
         print("Не установлен PyMuPDF (pip install pymupdf) — читать PDF нечем.")
         return 2

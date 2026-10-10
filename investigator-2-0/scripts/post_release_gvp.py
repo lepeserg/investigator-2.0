@@ -32,6 +32,7 @@ import glob
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import zipfile
@@ -112,8 +113,47 @@ def backup(path):
     return os.path.basename(dst)
 
 
-def kill_excel():
-    os.system("taskkill /F /IM EXCEL.EXE /T >nul 2>&1")
+def _own_pid(app):
+    """PID НАШЕГО экземпляра Excel — по его окну (Application.Hwnd).
+
+    None, если узнать не удалось (нет pywin32/Hwnd) — тогда ничего не убиваем."""
+    try:
+        import win32process
+        pid = win32process.GetWindowThreadProcessId(int(app.Hwnd))[1]
+        return pid if pid > 0 else None
+    except Exception:
+        return None
+
+
+def kill_excel(pid):
+    """Снять зависший СВОЙ EXCEL.EXE — только по PID, и никогда чужой.
+
+    ⛔ Прежняя версия делала `taskkill /F /IM EXCEL.EXE /T` — убивала ВСЕ Excel владельца
+    с несохранёнными книгами, хотя сам экземпляр поднимался через DispatchEx именно чтобы
+    рабочий Office не трогать. Теперь: PID неизвестен — не убиваем ничего; процесс уже
+    вышел после Quit() или PID занят не Excel'ем — тоже не трогаем.
+    ⚠ БЕЗ text=True: tasklist пишет в консольной кодировке (cp866)."""
+    if not pid:
+        return False
+
+    def alive():
+        try:
+            out = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid, "/FO", "CSV", "/NH"],
+                                 capture_output=True, timeout=30).stdout.decode("cp866", "replace")
+        except Exception:
+            return False                  # не смогли проверить — в сомнении не убиваем
+        return bool(re.search(r'"EXCEL\.EXE","%d"' % pid, out, re.I))
+
+    for _ in range(5):                    # дать Excel до ~5 с завершиться самому после Quit()
+        if not alive():
+            return False                  # вышел сам (или PID уже не Excel) — не трогаем
+        time.sleep(1)
+    try:
+        r = subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def main():
@@ -141,6 +181,7 @@ def main():
     pythoncom.CoInitialize()
     # DispatchEx — ОТДЕЛЬНЫЙ процесс Excel, чтобы не цепляться к рабочему Office владельца
     xl = win32.DispatchEx("Excel.Application")
+    xl_pid = _own_pid(xl)            # PID СВОЕГО процесса — после Quit() Hwnd уже не спросить
     xl.Visible = False
     xl.DisplayAlerts = False
     xl.AutomationSecurity = 3        # значения пишем — макросы не нужны
@@ -232,7 +273,7 @@ def main():
         except Exception:
             pass
         del xl
-        kill_excel()
+        kill_excel(xl_pid)           # только свой зависший процесс; чужие Excel не трогаем
 
     print("\nитог: обработано %d карт(ы), проблем: %d" % (len(releases), problems))
     return 1 if problems else 0

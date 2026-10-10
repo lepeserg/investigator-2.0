@@ -12,7 +12,8 @@ Opcii transcribe:
   --model large-v3   --lang ru   --device auto|cuda|cpu   --batch 16   --out <dir|prefix>
   --diarize          (razmetka govorjashhih; trebuet HF token)
   --speakers N | --min N --max N          (chislo govorjashhih, esli izvestno)
-  --hf-token <tok>   (ili peremennaja okruzhenija HF_TOKEN)
+  HF token: Dispetcher uchjotnyh dannyh Windows (setup_hf_access.py) ili peremennaja HF_TOKEN.
+  Peredacha tokena v komandnoj stroke ne podderzhivaetsja.
 
 Trebuet ffmpeg na PATH. Dlja transcribe: whisperx + torch. Dlja --diarize: HF token
 (modeli pyannote skachivajutsja odin raz, dal'she oflajn - zapis' ne pokidaet mashinu).
@@ -150,11 +151,17 @@ def cmd_transcribe(args):
     p.add_argument("--min", type=int, default=None, dest="min_sp")
     p.add_argument("--max", type=int, default=None, dest="max_sp")
     p.add_argument("--out", required=True, help="Папка или префикс результата внутри проекта")
-    p.add_argument("--hf-token", default=None, dest="hf_token")
     p.add_argument("--no-align", action="store_true", dest="no_align",
                    help="skip word-level alignment (faster, no ~1GB ru align model)")
+    # argparse принимает сокращения (--hf, --hf-tok); любое из них дало бы
+    # "unrecognized arguments: --hf-tok <токен>" с токеном в stderr. Поэтому
+    # отсекаем всё, что начинается с --hf, до разбора и значения не печатаем.
+    if any(x.startswith("--hf") for x in args):
+        p.error("Ключ --hf-token удалён: токен в командной строке попадает в список процессов и историю PowerShell. "
+                "Сохраните токен локально: py -3.12 run.py setup_hf_access.py (Диспетчер учётных данных Windows) "
+                "или задайте переменную окружения HF_TOKEN.")
     a = p.parse_args(args)
-    token = a.hf_token or os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
     if a.diarize and not token and sys.platform == 'win32':
         from setup_hf_access import saved_token
         token = saved_token()
@@ -210,7 +217,7 @@ def cmd_transcribe(args):
     # speaker diarization
     if a.diarize:
         if not token:
-            sys.stderr.write("ERROR: --diarize requires HF token (--hf-token or HF_TOKEN env var).\n")
+            sys.stderr.write("ERROR: --diarize requires HF token (setup_hf_access.py or HF_TOKEN env var).\n")
             sys.exit(4)
         try:
             from whisperx.diarize import DiarizationPipeline
