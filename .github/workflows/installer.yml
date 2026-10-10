@@ -10,6 +10,8 @@ on:
       - system_tools.py
       - bootstrap.py
       - requirements/**
+      - investigator-2-0/scripts/check_env.py
+      - run.py
       - .github/workflows/installer.yml
   workflow_dispatch:
 
