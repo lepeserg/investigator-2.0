@@ -20,6 +20,7 @@ import os
 import glob
 import shutil
 import importlib
+import importlib.util
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import find_tool  # noqa: E402
@@ -255,7 +256,9 @@ def _has_module(name, heavy=False):
         if heavy:
             importlib.import_module(name)
             return True
-        import importlib.util
+        # importlib.util импортирован на уровне модуля: локальный `import importlib.util`
+        # делал имя importlib локальным во всей функции, и ветка heavy всегда падала
+        # с UnboundLocalError → «пакета нет» при установленном пакете (поймано CI на Windows).
         return importlib.util.find_spec(name) is not None
     except Exception:
         return False

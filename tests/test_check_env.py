@@ -144,5 +144,17 @@ class MainRequirementTests(unittest.TestCase):
         self.assertEqual(code, 0)
 
 
+class HasModuleTests(unittest.TestCase):
+    """Реальная проверка без подмен: установленный модуль должен находиться в обоих режимах."""
+
+    def test_installed_module_found_with_and_without_import(self):
+        self.assertTrue(check_env._has_module('json', heavy=True))
+        self.assertTrue(check_env._has_module('json'))
+
+    def test_missing_module_reported(self):
+        self.assertFalse(check_env._has_module('no_such_module_xyz', heavy=True))
+        self.assertFalse(check_env._has_module('no_such_module_xyz'))
+
+
 if __name__ == '__main__':
     unittest.main()
