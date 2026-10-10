@@ -49,11 +49,13 @@ class PublicationAllowlistTests(unittest.TestCase):
                         for pattern in PUBLISHED_GLOBS for p in ROOT.glob(pattern) if p.is_file()})
         self.assertTrue(paths)
         # --no-index: judge by the rules only, so tracked files are checked as well.
-        result = subprocess.run([git, 'check-ignore', '--no-index', '--stdin'], cwd=ROOT,
-                                input='\n'.join(paths) + '\n', capture_output=True,
-                                text=True, encoding='utf-8', timeout=60)
-        self.assertIn(result.returncode, (0, 1), result.stderr)
-        ignored = [line for line in result.stdout.splitlines() if line]
+        # -z: NUL-separated paths. Text-mode pipes on Windows turn \n into \r\n, and git
+        # would read "\r" as part of every file name and report all of them as ignored.
+        result = subprocess.run([git, 'check-ignore', '--no-index', '--stdin', '-z'], cwd=ROOT,
+                                input=('\0'.join(paths) + '\0').encode('utf-8'),
+                                capture_output=True, timeout=60)
+        self.assertIn(result.returncode, (0, 1), result.stderr.decode('utf-8', 'replace'))
+        ignored = [p for p in result.stdout.decode('utf-8').split('\0') if p]
         self.assertEqual(ignored, [], 'Files are excluded by the .gitignore allowlist; '
                          'add explicit "!/<path>" entries after content review: ' + ', '.join(ignored))
 
