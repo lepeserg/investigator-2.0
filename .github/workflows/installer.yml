@@ -1,0 +1,89 @@
+name: installer
+
+# Real installation of the system programs on a clean Windows runner.
+# Slow (LibreOffice is several hundred MB), so it runs only when the installer changes.
+on:
+  push:
+    paths:
+      - setup_windows.py
+      - setup-windows.ps1
+      - system_tools.py
+      - bootstrap.py
+      - requirements/**
+      - .github/workflows/installer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+
+      - name: WinGet availability
+        shell: pwsh
+        run: |
+          $w = Get-Command winget -ErrorAction SilentlyContinue
+          if (-not $w) { Write-Error 'WinGet is not available on this runner'; exit 1 }
+          winget --version
+
+      # Same command line as setup_windows.install_package, plus non-interactive agreement
+      # flags that only CI needs (the real installer keeps the prompts visible).
+      # Records which packages install per user and which return 0x8A150010
+      # (no per-user installer) and fall back to the default scope.
+      - name: Install system programs (--scope user first)
+        shell: pwsh
+        run: |
+          $ids = 'TheDocumentFoundation.LibreOffice', 'tesseract-ocr.tesseract'
+          # Exit codes are signed Int32; compare as unsigned (hex literals in PowerShell are Int32).
+          function U32([int]$c) { [BitConverter]::ToUInt32([BitConverter]::GetBytes($c), 0) }
+          $noUserInstaller = [uint32]2316632080   # 0x8A150010 APPINSTALLER_CLI_ERROR_NO_APPLICABLE_INSTALLER
+          $failed = $false
+          foreach ($id in $ids) {
+            $base = @('install', '--id', $id, '--exact', '--source', 'winget',
+                      '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
+            winget @base --scope user
+            $code = U32 $LASTEXITCODE
+            Write-Host ("{0}: --scope user -> 0x{1:X8}" -f $id, $code)
+            if ($code -eq $noUserInstaller) {
+              winget @base
+              $code = U32 $LASTEXITCODE
+              Write-Host ("{0}: default scope -> 0x{1:X8}" -f $id, $code)
+            }
+            if ($code -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      # The real installer path: programs are already present, so it only prepares .venv
+      # (OCR Python packages) and the verified Tesseract language data; "y" answers its prompt.
+      - name: Prepare OCR set with setup_windows.py
+        shell: pwsh
+        run: |
+          'y' | python setup_windows.py --profile ocr
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Word is not installed on the runner, so the documents set must report Word COM
+      # as missing (LibreOffice does not replace it); the OCR set must be complete.
+      - name: check_env (OCR must be ready)
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\python.exe run.py check_env.py --profile ocr
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: check_env (documents without Word must fail)
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\python.exe run.py check_env.py --profile documents
+          if ($LASTEXITCODE -eq 0) { Write-Error 'Expected Word COM to be reported missing'; exit 1 }
+          exit 0
