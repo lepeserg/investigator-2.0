@@ -51,11 +51,11 @@ def _check_bundle_structure(root):
     errors = []
     bundle = Path(root).resolve().parent
     names = ['investigator-2-0'] + ['investigator-2-0-' + x for x in
-             ('analysis', 'correspondence', 'interrogations', 'actions', 'decisions', 'charging', 'stat-cards')]
+             ('analysis', 'correspondence', 'interrogations', 'actions', 'decisions', 'charging', 'stat-cards', 'case-management')]
     try:
         import yaml
     except ImportError:
-        return ['Для полной проверки восьми навыков требуется PyYAML (запуск через run.py)']
+        return ['Для полной проверки девяти навыков требуется PyYAML (запуск через run.py)']
     class UniqueLoader(yaml.SafeLoader):
         pass
     def unique_pairs(pairs):

@@ -20,7 +20,7 @@ class ConnectTests(unittest.TestCase):
     def test_all_entrypoints_resolve_and_repeat_is_safe(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'.test-tmp') as temp:
             root=Path(temp);self.prepare(root)
-            self.assertEqual(connect_skills.connect(root),8)
+            self.assertEqual(connect_skills.connect(root),9)
             for name in connect_skills.NAMES:
                 entry=root/'.agents/skills'/name/'SKILL.md'
                 self.assertTrue((entry.parent/'../../../'/name/'SKILL.md').resolve().is_file())

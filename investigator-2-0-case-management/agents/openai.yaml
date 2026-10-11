@@ -1,0 +1,6 @@
+interface:
+  display_name: "Следователь · Ведение дела"
+  short_description: "Состояние дела, запросы, противоречия и сроки"
+  default_prompt: "Используй $investigator-2-0-case-management, чтобы продолжить ведение дела и подготовить отчёт Word."
+policy:
+  allow_implicit_invocation: true

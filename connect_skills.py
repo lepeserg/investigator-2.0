@@ -4,7 +4,7 @@ import argparse
 
 ROOT = Path(__file__).resolve().parent
 NAMES = ['investigator-2-0'] + ['investigator-2-0-' + suffix for suffix in
-    ('analysis', 'correspondence', 'interrogations', 'actions', 'decisions', 'charging', 'stat-cards')]
+    ('analysis', 'correspondence', 'interrogations', 'actions', 'decisions', 'charging', 'stat-cards', 'case-management')]
 MARKER = '<!-- investigator-public-entrypoint -->'
 
 

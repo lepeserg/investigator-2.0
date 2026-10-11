@@ -29,6 +29,9 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q tests
 
+      - name: Case-management regressions
+        run: python investigator-2-0/scripts/case_manager_checks.py --verbose
+
       - name: Skill self-check
         run: python investigator-2-0/scripts/check_skill.py
 
